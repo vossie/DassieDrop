@@ -3091,13 +3091,13 @@ class ScriptTests(unittest.TestCase):
 
     def test_app_can_enable_https_with_self_signed_cert_support(self) -> None:
         config_source = (REPO_ROOT / "dassiedrop" / "config.py").read_text(encoding="utf-8")
-        routes_source = (REPO_ROOT / "dassiedrop" / "routes.py").read_text(encoding="utf-8")
+        http_support_source = (REPO_ROOT / "dassiedrop" / "http_support.py").read_text(encoding="utf-8")
         self.assertIn('HTTPS_ENABLED = os.environ.get("HTTPS", "").strip().lower() in {"1", "true", "yes", "on"}', config_source)
         self.assertIn('HTTP_PORT = int(os.environ.get("HTTP_PORT", os.environ.get("PORT", "8000")))', config_source)
         self.assertIn('HTTPS_PORT = int(os.environ.get("HTTPS_PORT", "8443"))', config_source)
         self.assertIn("def ensure_https_certificate()", config_source)
         self.assertIn('"openssl"', config_source)
-        self.assertIn("context.wrap_socket(server.socket, server_side=True)", routes_source)
+        self.assertIn("context.wrap_socket(server.socket, server_side=True)", http_support_source)
 
     def test_text_history_reveal_ui_is_inline(self) -> None:
         script = (REPO_ROOT / "assets" / "app.js").read_text(
