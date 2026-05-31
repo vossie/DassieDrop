@@ -202,7 +202,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       authLabel.textContent =
         actionToRender === "delete"
           ? "Enter the workspace password or super password to delete this workspace."
-          : "Enter the workspace password to open this workspace.";
+          : "Enter the workspace password or super password to open this workspace.";
 
       const authInput = document.createElement("input");
       authInput.type = "password";

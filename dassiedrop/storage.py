@@ -958,7 +958,7 @@ def enter_workspace(session_id: str, workspace_selector: str, password: str = ""
     workspace = get_workspace_by_selector(workspace_selector)
     if workspace is None:
         return (False, "Workspace not found")
-    if workspace.get("password_hash") and not workspace_password_is_valid(workspace, password.strip()):
+    if workspace.get("password_hash") and not workspace_delete_password_is_valid(workspace, password):
         return (False, "Wrong workspace password")
 
     with state.state_lock:

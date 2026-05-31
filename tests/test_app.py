@@ -415,6 +415,26 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
 
+    def test_can_enter_workspace_with_env_super_password(self) -> None:
+        workspace = app.create_workspace("Secure", password="vault")
+        session_id = app.create_authorized_session()
+        config.WORKSPACE_SUPER_PASSWORD = "override"
+
+        ok, message = app.enter_workspace(session_id, workspace["id"], password="override")
+
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+
+    def test_can_enter_workspace_with_stored_super_password(self) -> None:
+        workspace = app.create_workspace("Secure", password="vault")
+        session_id = app.create_authorized_session()
+        app.set_app_secrets(workspace_super_password="stored-override")
+
+        ok, message = app.enter_workspace(session_id, workspace["id"], password="stored-override")
+
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+
     def test_can_delete_workspace_with_stored_super_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         app.set_app_secrets(workspace_super_password="stored-override")
