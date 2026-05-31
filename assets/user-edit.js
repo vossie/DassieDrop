@@ -6,6 +6,7 @@ const editUserPassword = document.getElementById("editUserPassword");
 const editUserApiKey = document.getElementById("editUserApiKey");
 const editUserRole = document.getElementById("editUserRole");
 const editUserRoleField = document.getElementById("editUserRoleField");
+const authenticatorField = document.getElementById("authenticatorField");
 const setupTotpBtn = document.getElementById("setupTotpBtn");
 const disableTotpBtn = document.getElementById("disableTotpBtn");
 const totpSetupPanel = document.getElementById("totpSetupPanel");
@@ -56,9 +57,12 @@ async function loadUser() {
     editUserRole.disabled = !canManageUsers;
     editUserNameField.classList.toggle("user-self-hidden", !canManageUsers);
     editUserRoleField.classList.toggle("user-self-hidden", !canManageUsers);
-    setupTotpBtn.hidden = userId !== currentUserId;
-    disableTotpBtn.hidden = userId !== currentUserId && !canManageUsers;
-    disableTotpBtn.disabled = !user.totp_enabled;
+    const isOwnUser = userId === currentUserId;
+    const canDisableTotp = Boolean(user.totp_enabled) && (isOwnUser || canManageUsers);
+    setupTotpBtn.hidden = !isOwnUser;
+    disableTotpBtn.hidden = !canDisableTotp;
+    disableTotpBtn.disabled = !canDisableTotp;
+    authenticatorField.hidden = !isOwnUser && !canDisableTotp;
     setupTotpBtn.textContent = user.totp_enabled ? "Reset Authenticator" : "Set Up";
   } catch (error) {
     editUserStatus.textContent = "Could not load user.";
