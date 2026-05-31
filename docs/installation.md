@@ -94,6 +94,27 @@ Change that password from the Users page after first login.
 
 Root users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
 
+### Reset The Installed Admin Password
+
+If you lock yourself out of a native Linux service install, reset the shelve-backed `admin` user password from the server. The Ubuntu and CentOS Stream installers use the same default layout:
+
+- app code: `/opt/dassiedrop`
+- upload and shelve data: `/var/lib/dassiedrop/uploads`
+- service user: `dassiedrop`
+
+Run:
+
+```bash
+sudo systemctl stop dassiedrop
+
+cd /opt/dassiedrop
+sudo -u dassiedrop env UPLOAD_DIR=/var/lib/dassiedrop/uploads /usr/bin/python3.11 -c 'from dassiedrop import storage as s;s.load_persisted_files();u=[x for x in s.list_users() if x["username"].lower()=="admin"][0];s.update_user_secrets(u["id"],password="password");print("admin password reset")'
+
+sudo systemctl start dassiedrop
+```
+
+Change `password="password"` in the command if you want a different replacement password.
+
 ## Run With HTTPS
 
 DassieDrop can generate a local self-signed certificate automatically when you enable HTTPS.

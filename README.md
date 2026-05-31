@@ -204,6 +204,8 @@ password: password
 
 Change the default password from the Users page after first login.
 
+For native Ubuntu or CentOS Stream service installs, see [Reset The Installed Admin Password](docs/installation.md#reset-the-installed-admin-password) if you lock yourself out.
+
 ---
 
 ## Why "Dassie"?
