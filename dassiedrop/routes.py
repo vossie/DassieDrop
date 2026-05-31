@@ -718,6 +718,10 @@ class AppHandler(BaseHTTPRequestHandler):
         if type(expiry_seconds) is not int or expiry_seconds < 0:
             self.send_error(HTTPStatus.BAD_REQUEST, "Expiry seconds must be a non-negative integer")
             return
+        message_expiry_seconds = payload.get("message_expiry_seconds", expiry_seconds)
+        if type(message_expiry_seconds) is not int or message_expiry_seconds < 0:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Message expiry seconds must be a non-negative integer")
+            return
         access_mode = payload.get("access_mode", "password" if password.strip() else "public")
         if not isinstance(access_mode, str) or access_mode not in {"public", "password", "explicit"}:
             self.send_error(HTTPStatus.BAD_REQUEST, "Access mode must be public, password, or explicit")
@@ -737,6 +741,7 @@ class AppHandler(BaseHTTPRequestHandler):
             name,
             password=password.strip(),
             expiry_seconds=expiry_seconds,
+            message_expiry_seconds=message_expiry_seconds,
             owner_user_id=self.current_user_id(),
             access_mode=access_mode,
         )

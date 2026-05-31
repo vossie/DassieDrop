@@ -5,6 +5,7 @@ const workspaceAccessMode = document.getElementById("workspaceAccessMode");
 const workspacePasswordWrap = document.getElementById("workspacePasswordWrap");
 const workspacePassword = document.getElementById("workspacePassword");
 const workspaceExpiry = document.getElementById("workspaceExpiry");
+const workspaceMessageExpiry = document.getElementById("workspaceMessageExpiry");
 const createWorkspaceBtn = document.getElementById("createWorkspaceBtn");
 const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("workspace") || "";
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
@@ -63,6 +64,28 @@ function formatWorkspaceExpiry(seconds) {
     return `Expires after ${hours} ${hours === 1 ? "hour" : "hours"}`;
   }
   return `Expires after ${seconds} seconds`;
+}
+
+function syncMessageExpiryOptions() {
+  const workspaceSeconds = Number.parseInt(workspaceExpiry.value, 10);
+  const messageSeconds = Number.parseInt(workspaceMessageExpiry.value, 10);
+  let selectedStillAllowed = false;
+
+  for (const option of workspaceMessageExpiry.options) {
+    const optionSeconds = Number.parseInt(option.value, 10);
+    const tooLong =
+      Number.isInteger(workspaceSeconds) &&
+      workspaceSeconds > 0 &&
+      (optionSeconds === 0 || optionSeconds > workspaceSeconds);
+    option.disabled = tooLong;
+    if (!tooLong && option.value === workspaceMessageExpiry.value) {
+      selectedStillAllowed = true;
+    }
+  }
+
+  if (!selectedStillAllowed || (workspaceSeconds > 0 && messageSeconds > workspaceSeconds)) {
+    workspaceMessageExpiry.value = workspaceExpiry.value;
+  }
 }
 
 async function openWorkspace(workspace) {
@@ -242,7 +265,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId, users = knownUsers, us
     meta.className = "meta workspace-meta";
     const scope = workspaceScopeLabel(workspace);
     const current = workspace.id === currentWorkspaceId ? " • Current selection" : "";
-    meta.textContent = `${scope} - ${formatWorkspaceExpiry(workspace.expiry_seconds)} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
+    meta.textContent = `${scope} - Workspace ${formatWorkspaceExpiry(workspace.expiry_seconds).toLowerCase()} - Messages ${formatWorkspaceExpiry(workspace.message_expiry_seconds).toLowerCase()} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
 
     details.appendChild(name);
     details.appendChild(meta);
@@ -433,24 +456,42 @@ async function createWorkspace() {
   const accessMode = workspaceAccessMode.value;
   const password = accessMode === "password" ? workspacePassword.value : "";
   const expirySeconds = Number.parseInt(workspaceExpiry.value, 10);
+  const messageExpirySeconds = Number.parseInt(workspaceMessageExpiry.value, 10);
   if (!Number.isInteger(expirySeconds) || expirySeconds < 0) {
     setWorkspaceStatus("Workspace expiry invalid.");
+    return;
+  }
+  if (!Number.isInteger(messageExpirySeconds) || messageExpirySeconds < 0) {
+    setWorkspaceStatus("Message expiry invalid.");
+    return;
+  }
+  if (expirySeconds > 0 && (messageExpirySeconds === 0 || messageExpirySeconds > expirySeconds)) {
+    setWorkspaceStatus("Messages cannot expire after the workspace.");
+    syncMessageExpiryOptions();
     return;
   }
   try {
     const response = await fetch("/api/workspaces", {
       method: "POST",
       headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name, password, expiry_seconds: expirySeconds, access_mode: accessMode })
+      body: JSON.stringify({
+        name,
+        password,
+        expiry_seconds: expirySeconds,
+        message_expiry_seconds: messageExpirySeconds,
+        access_mode: accessMode
+      })
     });
     if (!response.ok) {
       throw new Error(`Workspace create failed: ${response.status}`);
     }
     workspaceName.value = "";
     workspaceExpiry.value = "86400";
+    workspaceMessageExpiry.value = "86400";
     workspaceAccessMode.value = "public";
     workspacePassword.value = "";
     toggleWorkspacePassword();
+    syncMessageExpiryOptions();
     const payload = await response.json();
     renderWorkspaces(
       payload.workspaces || [],
@@ -465,6 +506,7 @@ async function createWorkspace() {
 }
 
 workspaceAccessMode.addEventListener("change", toggleWorkspacePassword);
+workspaceExpiry.addEventListener("change", syncMessageExpiryOptions);
 createWorkspaceBtn.addEventListener("click", createWorkspace);
 workspaceName.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -478,4 +520,5 @@ workspacePassword.addEventListener("keydown", (event) => {
 });
 
 toggleWorkspacePassword();
+syncMessageExpiryOptions();
 loadWorkspaces();

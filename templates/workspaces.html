@@ -47,8 +47,19 @@
         <div class="row text-controls-row workspace-create-row">
           <button id="createWorkspaceBtn" type="button">Create Workspace</button>
         <label class="workspace-expiry-label" for="workspaceExpiry">
-          <span>Expires</span>
+          <span>Workspace expires</span>
           <select id="workspaceExpiry" class="inline-input workspace-expiry-select">
+            <option value="3600">After 1 hour</option>
+            <option value="86400" selected>After 24 hours</option>
+            <option value="604800">After 7 days</option>
+            <option value="2592000">After 30 days</option>
+            <option value="0">Never</option>
+          </select>
+        </label>
+        <label class="workspace-expiry-label" for="workspaceMessageExpiry">
+          <span>Messages expire</span>
+          <select id="workspaceMessageExpiry" class="inline-input workspace-expiry-select">
+            <option value="900">After 15 minutes</option>
             <option value="3600">After 1 hour</option>
             <option value="86400" selected>After 24 hours</option>
             <option value="604800">After 7 days</option>

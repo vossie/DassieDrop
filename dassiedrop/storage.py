@@ -231,6 +231,7 @@ def build_workspace(
     name: str,
     password_hash: str | None = None,
     expiry_seconds: int | None = None,
+    message_expiry_seconds: int | None = None,
     workspace_id: str | None = None,
     slug: str | None = None,
     created_at: float | None = None,
@@ -241,6 +242,7 @@ def build_workspace(
 ) -> dict:
     timestamp = config.now_ts() if created_at is None else created_at
     normalized_access_mode = normalize_workspace_access_mode(access_mode, password_hash)
+    normalized_expiry_seconds = normalize_expiry_seconds(expiry_seconds)
     return {
         "id": workspace_id or make_workspace_id(),
         "name": sanitize_workspace_name(name),
@@ -249,7 +251,11 @@ def build_workspace(
         "owner_user_id": str(owner_user_id or "").strip(),
         "access_mode": normalized_access_mode,
         "explicit_user_ids": normalize_workspace_user_ids(explicit_user_ids),
-        "expiry_seconds": normalize_expiry_seconds(expiry_seconds),
+        "expiry_seconds": normalized_expiry_seconds,
+        "message_expiry_seconds": normalize_message_expiry_seconds(
+            message_expiry_seconds,
+            normalized_expiry_seconds,
+        ),
         "created_at": timestamp,
         "updated_at": 0.0,
         "last_used_at": timestamp if last_used_at is None else last_used_at,
@@ -291,6 +297,27 @@ def normalize_expiry_seconds(value: object) -> int:
 
 def workspace_expiry_seconds(workspace: dict) -> int:
     return normalize_expiry_seconds(workspace.get("expiry_seconds"))
+
+
+def normalize_message_expiry_seconds(value: object, workspace_expiry_seconds: int) -> int:
+    workspace_seconds = normalize_expiry_seconds(workspace_expiry_seconds)
+    if value is None or value == "":
+        return workspace_seconds
+    try:
+        message_seconds = int(value)
+    except (TypeError, ValueError):
+        return workspace_seconds
+    message_seconds = max(0, message_seconds)
+    if workspace_seconds > 0 and (message_seconds <= 0 or message_seconds > workspace_seconds):
+        return workspace_seconds
+    return message_seconds
+
+
+def workspace_message_expiry_seconds(workspace: dict) -> int:
+    return normalize_message_expiry_seconds(
+        workspace.get("message_expiry_seconds"),
+        workspace_expiry_seconds(workspace),
+    )
 
 
 def entry_expires_at(created_at: float, expiry_seconds: int) -> float | None:
@@ -482,6 +509,7 @@ def serialize_workspace_summary(workspace: dict) -> dict:
         "owner_user_id": str(workspace.get("owner_user_id") or ""),
         "explicit_user_ids": normalize_workspace_user_ids(workspace.get("explicit_user_ids")),
         "expiry_seconds": workspace_expiry_seconds(workspace),
+        "message_expiry_seconds": workspace_message_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
         "updated_at": workspace["updated_at"],
         "text_count": len(workspace["texts"]),
@@ -499,6 +527,7 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
         "access_mode": workspace_access_mode(workspace),
         "explicit_user_ids": normalize_workspace_user_ids(workspace.get("explicit_user_ids")),
         "expiry_seconds": workspace_expiry_seconds(workspace),
+        "message_expiry_seconds": workspace_message_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
         "updated_at": workspace["updated_at"],
         "last_used_at": workspace.get("last_used_at", workspace["created_at"]),
@@ -928,9 +957,12 @@ def load_persisted_workspaces() -> None:
         return restored
 
     def restore_expires_at(value: object, created_at: float, expiry_seconds: int) -> float | None:
+        if expiry_seconds <= 0:
+            return None
+        default_expires_at = created_at + expiry_seconds
         if value is None:
-            return None if expiry_seconds <= 0 else created_at + expiry_seconds
-        return restore_float(value, config.now_ts() + expiry_seconds) if expiry_seconds > 0 else None
+            return default_expires_at
+        return min(restore_float(value, default_expires_at), default_expires_at)
 
     def restore_text_entry(text_item: dict, expiry_seconds: int) -> dict | None:
         content = text_item.get("content")
@@ -1007,6 +1039,7 @@ def load_persisted_workspaces() -> None:
                     if isinstance(item.get("password_hash"), str)
                     else None,
                     expiry_seconds=normalize_expiry_seconds(item.get("expiry_seconds")),
+                    message_expiry_seconds=item.get("message_expiry_seconds"),
                     workspace_id=workspace_id,
                     slug=str(item.get("slug") or workspace_slug(str(item.get("name") or config.DEFAULT_WORKSPACE_NAME))),
                     created_at=restore_float(item.get("created_at"), config.now_ts()),
@@ -1022,7 +1055,7 @@ def load_persisted_workspaces() -> None:
                 if not isinstance(raw_texts, list):
                     raw_texts = []
                 restored_texts = []
-                expiry_seconds = workspace_expiry_seconds(workspace)
+                expiry_seconds = workspace_message_expiry_seconds(workspace)
                 for text_item in raw_texts:
                     if not isinstance(text_item, dict):
                         continue
@@ -1068,7 +1101,7 @@ def load_persisted_workspaces() -> None:
                 for file_item in raw_files:
                     if not isinstance(file_item, dict):
                         continue
-                    restored = restore_file_entry(file_item, workspace_expiry_seconds(workspace))
+                    restored = restore_file_entry(file_item, workspace_message_expiry_seconds(workspace))
                     if restored is not None:
                         restored_files.append(restored)
                 restored_files.sort(key=lambda entry: entry["created_at"], reverse=True)
@@ -1167,7 +1200,7 @@ def serialize_workspace_payload(workspace: dict) -> dict:
     return {
         "workspace": serialize_workspace_summary(workspace),
         "updated_at": workspace["updated_at"],
-        "expires_after_seconds": workspace_expiry_seconds(workspace),
+        "expires_after_seconds": workspace_message_expiry_seconds(workspace),
         "latest_text": ""
         if not workspace["texts"]
         else (
@@ -1232,6 +1265,7 @@ def create_workspace(
     name: str,
     password: str = "",
     expiry_seconds: int | None = None,
+    message_expiry_seconds: int | None = None,
     owner_user_id: str | None = None,
     access_mode: str | None = None,
     explicit_user_ids: list[str] | None = None,
@@ -1239,6 +1273,11 @@ def create_workspace(
     workspace_name = sanitize_workspace_name(name)
     selected_access_mode = access_mode or ("password" if password.strip() else "public")
     clean_access_mode = normalize_workspace_access_mode(selected_access_mode)
+    clean_expiry_seconds = normalize_expiry_seconds(expiry_seconds)
+    clean_message_expiry_seconds = normalize_message_expiry_seconds(
+        message_expiry_seconds,
+        clean_expiry_seconds,
+    )
     password_hash = hash_password(password.strip()) if clean_access_mode == "password" and password.strip() else None
     if clean_access_mode == "password" and password_hash is None:
         clean_access_mode = "public"
@@ -1248,7 +1287,8 @@ def create_workspace(
             workspace_name,
             slug=make_unique_workspace_slug_locked(workspace_name),
             password_hash=password_hash,
-            expiry_seconds=expiry_seconds,
+            expiry_seconds=clean_expiry_seconds,
+            message_expiry_seconds=clean_message_expiry_seconds,
             owner_user_id=owner_user_id,
             access_mode=clean_access_mode,
             explicit_user_ids=explicit_user_ids,
@@ -1357,7 +1397,7 @@ def add_text_entry(
         if workspace is None:
             workspace = ensure_default_workspace_locked()
         prune_workspace_locked(workspace)
-        expiry_seconds = workspace_expiry_seconds(workspace)
+        expiry_seconds = workspace_message_expiry_seconds(workspace)
         created_at = config.now_ts()
         workspace["texts"].insert(
             0,
@@ -1410,7 +1450,7 @@ def add_file(
         if workspace is None:
             workspace = ensure_default_workspace_locked()
         prune_workspace_locked(workspace)
-        expiry_seconds = workspace_expiry_seconds(workspace)
+        expiry_seconds = workspace_message_expiry_seconds(workspace)
         previous_files = list(workspace["files"])
         previous_updated_at = workspace.get("updated_at", 0.0)
         previous_last_used_at = workspace.get("last_used_at", workspace["created_at"])

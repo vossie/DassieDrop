@@ -222,6 +222,7 @@ class ApiContractHttpTests(CoreHttpTestCase):
                 "owner_user_id",
                 "explicit_user_ids",
                 "expiry_seconds",
+                "message_expiry_seconds",
                 "created_at",
                 "updated_at",
                 "text_count",

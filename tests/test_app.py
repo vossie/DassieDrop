@@ -293,6 +293,47 @@ class AppStateTests(unittest.TestCase):
         self.current_time += 61
         self.assertEqual(app.get_snapshot(workspace["id"])["texts"], [])
 
+    def test_workspace_message_expiry_can_be_shorter_than_workspace_expiry(self) -> None:
+        workspace = app.create_workspace(
+            "Long Room Short Messages",
+            expiry_seconds=3600,
+            message_expiry_seconds=60,
+        )
+
+        app.add_text_entry("brief text", workspace_id=workspace["id"])
+        target = config.UPLOAD_DIR / "brief.txt"
+        target.write_text("brief file", encoding="utf-8")
+        app.add_file("brief.txt", "brief.txt", target.stat().st_size, workspace_id=workspace["id"])
+
+        snapshot = app.get_snapshot(workspace["id"])
+        self.assertEqual(snapshot["workspace"]["expiry_seconds"], 3600)
+        self.assertEqual(snapshot["workspace"]["message_expiry_seconds"], 60)
+        self.assertEqual(snapshot["expires_after_seconds"], 60)
+        self.assertEqual(snapshot["texts"][0]["expires_at"], self.current_time + 60)
+        self.assertEqual(snapshot["files"][0]["expires_at"], self.current_time + 60)
+
+        self.current_time += 61
+        listed = app.list_workspaces()
+        snapshot = app.get_snapshot(workspace["id"])
+        self.assertIn(workspace["id"], {item["id"] for item in listed})
+        self.assertEqual(snapshot["texts"], [])
+        self.assertEqual(snapshot["files"], [])
+
+    def test_workspace_message_expiry_is_capped_to_workspace_expiry(self) -> None:
+        longer = app.create_workspace(
+            "Too Long",
+            expiry_seconds=60,
+            message_expiry_seconds=3600,
+        )
+        infinite = app.create_workspace(
+            "Never Too Long",
+            expiry_seconds=60,
+            message_expiry_seconds=0,
+        )
+
+        self.assertEqual(longer["message_expiry_seconds"], 60)
+        self.assertEqual(infinite["message_expiry_seconds"], 60)
+
     def test_workspace_infinite_expiry_keeps_entries_and_workspace(self) -> None:
         workspace = app.create_workspace("Permanent", expiry_seconds=0)
 
@@ -975,6 +1016,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(payload["workspace"]["slug"], "qa-room")
         self.assertTrue(payload["workspace"]["password_required"])
         self.assertEqual(payload["workspace"]["expiry_seconds"], app.EXPIRY_SECONDS)
+        self.assertEqual(payload["workspace"]["message_expiry_seconds"], app.EXPIRY_SECONDS)
 
     def test_workspace_creation_endpoint_records_creator_and_explicit_users(self) -> None:
         self.start_server()
@@ -1065,13 +1107,43 @@ class HttpServerTests(unittest.TestCase):
         response = self.request(
             "POST",
             "/api/workspaces",
-            body=json.dumps({"name": "QA Room", "password": "", "expiry_seconds": 0}).encode("utf-8"),
+            body=json.dumps(
+                {
+                    "name": "QA Room",
+                    "password": "",
+                    "expiry_seconds": 3600,
+                    "message_expiry_seconds": 60,
+                }
+            ).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
         self.assertEqual(response["status"], 200)
         payload = json.loads(response["body"])
-        self.assertEqual(payload["workspace"]["expiry_seconds"], 0)
+        self.assertEqual(payload["workspace"]["expiry_seconds"], 3600)
+        self.assertEqual(payload["workspace"]["message_expiry_seconds"], 60)
+
+    def test_workspace_creation_endpoint_caps_message_expiry_to_workspace_expiry(self) -> None:
+        self.start_server()
+
+        response = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps(
+                {
+                    "name": "QA Room",
+                    "password": "",
+                    "expiry_seconds": 60,
+                    "message_expiry_seconds": 3600,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response["status"], 200)
+        payload = json.loads(response["body"])
+        self.assertEqual(payload["workspace"]["expiry_seconds"], 60)
+        self.assertEqual(payload["workspace"]["message_expiry_seconds"], 60)
 
     def test_workspace_creation_endpoint_rejects_invalid_expiry(self) -> None:
         self.start_server()
@@ -1080,6 +1152,17 @@ class HttpServerTests(unittest.TestCase):
             "POST",
             "/api/workspaces",
             body=json.dumps({"name": "QA Room", "password": "", "expiry_seconds": -1}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response["status"], 400)
+
+        response = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps(
+                {"name": "QA Room", "password": "", "expiry_seconds": 60, "message_expiry_seconds": -1}
+            ).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
@@ -2848,9 +2931,12 @@ class ScriptTests(unittest.TestCase):
         )
         self.assertIn("Create Workspace", template)
         self.assertIn('id="workspaceAccessMode"', template)
+        self.assertIn('id="workspaceMessageExpiry"', template)
         self.assertIn('value="explicit"', template)
         self.assertIn('fetch("/api/workspaces")', script)
         self.assertIn("saveExplicitWorkspaceUsers", script)
+        self.assertIn("syncMessageExpiryOptions", script)
+        self.assertIn("message_expiry_seconds: messageExpirySeconds", script)
         self.assertIn('href="/workspaces"', index)
         self.assertIn('class="hero-brand-link"', index)
         self.assertIn('/assets/DassieDrop-dassie-icon.png', index)

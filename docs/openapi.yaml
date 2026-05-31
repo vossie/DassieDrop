@@ -754,7 +754,12 @@ components:
           type: integer
           minimum: 0
           default: 86400
-          description: Workspace item and inactivity expiry in seconds. Use `0` for no expiry.
+          description: Workspace inactivity expiry in seconds. Use `0` for no expiry.
+        message_expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Message and file expiry in seconds. Use `0` for no expiry. If the workspace expires, messages are capped to the workspace expiry.
       additionalProperties: false
     WorkspacePasswordRequest:
       allOf:
@@ -768,6 +773,20 @@ components:
           description: Workspace identifier. Allowed characters are `a-z`, `0-9`, `-`, `_`, and `.`.
         password:
           type: string
+        expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Workspace inactivity expiry in seconds. Use `0` for no expiry.
+        message_expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Message and file expiry in seconds. Use `0` for no expiry. If the workspace expires, messages are capped to the workspace expiry.
+        access_mode:
+          type: string
+          enum: [public, password, explicit]
+          default: public
       additionalProperties: false
     WorkspaceSummary:
       type: object
@@ -778,6 +797,7 @@ components:
         - path
         - password_required
         - expiry_seconds
+        - message_expiry_seconds
         - created_at
         - updated_at
         - text_count
@@ -796,7 +816,11 @@ components:
         expiry_seconds:
           type: integer
           minimum: 0
-          description: Workspace item and inactivity expiry in seconds. `0` means no expiry.
+          description: Workspace inactivity expiry in seconds. `0` means no expiry.
+        message_expiry_seconds:
+          type: integer
+          minimum: 0
+          description: Message and file expiry in seconds. `0` means no expiry.
         created_at:
           type: number
         updated_at:
@@ -937,7 +961,7 @@ components:
         expires_after_seconds:
           type: integer
           minimum: 0
-          description: Workspace expiry policy in seconds. `0` means no expiry.
+          description: Message and file expiry policy in seconds. `0` means no expiry.
         latest_text:
           type: string
         texts:
