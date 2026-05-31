@@ -31,6 +31,29 @@ function renderSettings(settings) {
   hashIterationsState.textContent = String(settings.password_hash_iterations || "");
 }
 
+function bindClearControl(input, checkbox) {
+  function syncClearState() {
+    input.disabled = checkbox.checked;
+    input.classList.toggle("settings-input-cleared", checkbox.checked);
+    if (checkbox.checked) {
+      input.value = "";
+    }
+  }
+  checkbox.addEventListener("change", syncClearState);
+  syncClearState();
+  return syncClearState;
+}
+
+const syncClearControls = [
+  bindClearControl(accessCodeInput, clearAccessCode),
+  bindClearControl(apiKeyInput, clearApiKey),
+  bindClearControl(superPasswordInput, clearSuperPassword)
+];
+
+function syncAllClearControls() {
+  syncClearControls.forEach((syncClearControl) => syncClearControl());
+}
+
 async function loadSettings() {
   try {
     const response = await fetch("/api/settings");
@@ -70,6 +93,7 @@ async function saveSettings() {
     clearAccessCode.checked = false;
     clearApiKey.checked = false;
     clearSuperPassword.checked = false;
+    syncAllClearControls();
     renderSettings(await response.json());
     settingsStatus.textContent = "Settings saved.";
   } catch (error) {
