@@ -664,6 +664,19 @@ class AppStateTests(unittest.TestCase):
         self.assertIn("otpauth_uri", setup)
         self.assertEqual(setup["qr_svg"], "")
 
+    def test_user_totp_setup_returns_secret_if_qr_rendering_crashes(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
+        original_qr_svg = storage.qr_svg
+        try:
+            storage.qr_svg = lambda _uri: (_ for _ in ()).throw(RuntimeError("qr failed"))
+            setup = storage.begin_user_totp_setup(user["id"])
+        finally:
+            storage.qr_svg = original_qr_svg
+
+        self.assertIn("secret", setup)
+        self.assertIn("otpauth_uri", setup)
+        self.assertEqual(setup["qr_svg"], "")
+
     def test_user_totp_setup_accepts_setup_timestamp_code(self) -> None:
         user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
         setup = storage.begin_user_totp_setup(user["id"])

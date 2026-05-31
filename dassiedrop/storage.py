@@ -949,7 +949,7 @@ def begin_user_totp_setup(user_id: str) -> dict:
         otpauth_uri = totp_uri(user["username"], secret)
         try:
             qr_markup = qr_svg(otpauth_uri)
-        except ValueError:
+        except Exception:
             qr_markup = ""
         return {
             "secret": secret,

@@ -335,6 +335,9 @@ class ManagementRoutesMixin:
         except ValueError as exc:
             self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
+        except Exception:
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Authenticator setup failed")
+            return
         self.send_json(setup_payload)
 
     def handle_user_totp_confirm(self, user_id: str) -> None:
