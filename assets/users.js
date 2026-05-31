@@ -4,6 +4,7 @@ const usersStatus = document.getElementById("usersStatus");
 const usersList = document.getElementById("usersList");
 const usersToolbar = document.getElementById("usersToolbar");
 let canManageUsers = false;
+let currentUserId = "";
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -60,7 +61,7 @@ function renderUsers(users) {
     editLink.textContent = "Edit";
 
     actions.appendChild(editLink);
-    if (canManageUsers) {
+    if (canManageUsers && user.id !== currentUserId) {
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "danger";
@@ -98,6 +99,7 @@ async function loadUsers() {
     }
     const payload = await response.json();
     canManageUsers = Boolean(payload.can_manage_users);
+    currentUserId = payload.current_user_id || "";
     renderUsers(payload.users || []);
   } catch (error) {
     usersStatus.textContent = "Could not load users.";

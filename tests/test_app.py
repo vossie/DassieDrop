@@ -651,6 +651,19 @@ class AppStateTests(unittest.TestCase):
         self.assertFalse(disabled["totp_enabled"])
         self.assertFalse(storage.user_totp_code_is_valid(user["id"], code))
 
+    def test_user_totp_setup_returns_secret_if_qr_rendering_fails(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
+        original_qr_svg = storage.qr_svg
+        try:
+            storage.qr_svg = lambda _uri: (_ for _ in ()).throw(ValueError("too large"))
+            setup = storage.begin_user_totp_setup(user["id"])
+        finally:
+            storage.qr_svg = original_qr_svg
+
+        self.assertIn("secret", setup)
+        self.assertIn("otpauth_uri", setup)
+        self.assertEqual(setup["qr_svg"], "")
+
     def test_user_totp_setup_accepts_setup_timestamp_code(self) -> None:
         user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
         setup = storage.begin_user_totp_setup(user["id"])
@@ -1938,6 +1951,7 @@ class HttpServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(blocked_delete["status"], 400)
+        self.assertIn("You cannot delete your own account", blocked_delete["text"])
 
         response = self.request(
             "POST",
@@ -2009,6 +2023,17 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(second_root["status"], 200)
 
+        blocked_self_delete = self.request(
+            "DELETE",
+            f"/api/users/{initial_root_id}",
+            headers={
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_self_delete["status"], 400)
+        self.assertIn("You cannot delete your own account", blocked_self_delete["text"])
+
         duplicate_update = self.request(
             "POST",
             f"/api/users/{payload['user']['id']}",
@@ -2044,6 +2069,8 @@ class HttpServerTests(unittest.TestCase):
         users_script = self.request("GET", "/assets/users.js", headers={"Cookie": cookie})
         self.assertEqual(users_script["status"], 200)
         self.assertIn("/users/edit?id=", users_script["text"])
+        self.assertIn("let currentUserId = \"\"", users_script["text"])
+        self.assertIn("user.id !== currentUserId", users_script["text"])
         edit_page = self.request(
             "GET",
             f"/users/edit?id={payload['user']['id']}",

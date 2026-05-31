@@ -946,10 +946,15 @@ def begin_user_totp_setup(user_id: str) -> dict:
         user["totp_pending_at"] = server_time
         user["updated_at"] = server_time
         persist_state_locked()
+        otpauth_uri = totp_uri(user["username"], secret)
+        try:
+            qr_markup = qr_svg(otpauth_uri)
+        except ValueError:
+            qr_markup = ""
         return {
             "secret": secret,
-            "otpauth_uri": totp_uri(user["username"], secret),
-            "qr_svg": qr_svg(totp_uri(user["username"], secret)),
+            "otpauth_uri": otpauth_uri,
+            "qr_svg": qr_markup,
             "period": TOTP_PERIOD_SECONDS,
             "digits": TOTP_DIGITS,
             "server_time": server_time,

@@ -173,7 +173,8 @@ async function setupTotp() {
       body: JSON.stringify({})
     });
     if (!response.ok) {
-      throw new Error(`Authenticator setup failed: ${response.status}`);
+      const message = await response.text();
+      throw new Error(message || `Authenticator setup failed: ${response.status}`);
     }
     const payload = await response.json();
     totpQrCode.innerHTML = payload.qr_svg || "";
@@ -190,7 +191,10 @@ async function setupTotp() {
     editUserStatus.textContent = "Add the secret to your authenticator app.";
     totpCode.focus();
   } catch (error) {
-    editUserStatus.textContent = "Could not start authenticator setup.";
+    const detail = String(error.message || "").trim();
+    editUserStatus.textContent = detail
+      ? `Could not start authenticator setup: ${detail.split("\n")[0]}`
+      : "Could not start authenticator setup.";
   }
 }
 

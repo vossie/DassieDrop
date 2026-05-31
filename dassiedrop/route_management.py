@@ -298,6 +298,10 @@ class ManagementRoutesMixin:
         self.send_json({"user": user, **self.users_payload()})
 
     def handle_user_delete(self, user_id: str) -> None:
+        current_user = auth.current_user(self)
+        if current_user is not None and user_id == current_user.get("id"):
+            self.send_error(HTTPStatus.BAD_REQUEST, "You cannot delete your own account")
+            return
         try:
             deleted = storage.delete_user(user_id)
         except ValueError as exc:
