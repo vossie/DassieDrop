@@ -4,6 +4,7 @@ const workspaceName = document.getElementById("workspaceName");
 const workspaceProtected = document.getElementById("workspaceProtected");
 const workspacePasswordWrap = document.getElementById("workspacePasswordWrap");
 const workspacePassword = document.getElementById("workspacePassword");
+const workspaceExpiry = document.getElementById("workspaceExpiry");
 const createWorkspaceBtn = document.getElementById("createWorkspaceBtn");
 const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("workspace") || "";
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
@@ -44,6 +45,21 @@ function formatWorkspaceDate(ts) {
     return "Just now";
   }
   return new Date(ts * 1000).toLocaleString();
+}
+
+function formatWorkspaceExpiry(seconds) {
+  if (seconds === 0) {
+    return "Never expires";
+  }
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400;
+    return `Expires after ${days} ${days === 1 ? "day" : "days"}`;
+  }
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `Expires after ${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return `Expires after ${seconds} seconds`;
 }
 
 async function openWorkspace(workspace) {
@@ -113,7 +129,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     meta.className = "meta workspace-meta";
     const scope = workspace.password_required ? "Protected" : "Public";
     const current = workspace.id === currentWorkspaceId ? " • Current selection" : "";
-    meta.textContent = `${scope} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
+    meta.textContent = `${scope} - ${formatWorkspaceExpiry(workspace.expiry_seconds)} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
 
     details.appendChild(name);
     details.appendChild(meta);
@@ -280,16 +296,22 @@ async function createWorkspace() {
     return;
   }
   const password = workspaceProtected.checked ? workspacePassword.value : "";
+  const expirySeconds = Number.parseInt(workspaceExpiry.value, 10);
+  if (!Number.isInteger(expirySeconds) || expirySeconds < 0) {
+    setWorkspaceStatus("Workspace expiry invalid.");
+    return;
+  }
   try {
     const response = await fetch("/api/workspaces", {
       method: "POST",
       headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name, password })
+      body: JSON.stringify({ name, password, expiry_seconds: expirySeconds })
     });
     if (!response.ok) {
       throw new Error(`Workspace create failed: ${response.status}`);
     }
     workspaceName.value = "";
+    workspaceExpiry.value = "86400";
     workspaceProtected.checked = false;
     workspacePassword.value = "";
     toggleWorkspacePassword();

@@ -40,9 +40,11 @@ Create a workspace:
 curl -sS \
   -H 'Content-Type: application/json' \
   -X POST \
-  -d '{"name":"ops-desk","password":"vault"}' \
+  -d '{"name":"ops-desk","password":"vault","expiry_seconds":86400}' \
   http://127.0.0.1:8000/api/workspaces
 ```
+
+Set `expiry_seconds` to `0` for a workspace whose items and workspace record never expire automatically.
 
 Read state for a workspace by slug:
 

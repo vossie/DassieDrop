@@ -23,6 +23,11 @@ def reset_app_state() -> None:
         state.shared_state["workspaces"] = {}
         state.shared_state["reserved_upload_bytes"] = 0
         state.shared_state["reserved_upload_names"] = set()
+        state.shared_state["app_settings"] = {
+            "access_code_hash": None,
+            "api_key_hash": None,
+            "workspace_super_password_hash": None,
+        }
         state.shared_state["update_check"] = {
             "checking": False,
             "last_checked_at": 0.0,
@@ -246,6 +251,31 @@ class AppStateTests(unittest.TestCase):
         created = next(item for item in listed if item["id"] == workspace["id"])
         self.assertEqual(created["slug"], "private-ops")
         self.assertTrue(created["password_required"])
+        self.assertEqual(created["expiry_seconds"], app.EXPIRY_SECONDS)
+
+    def test_workspace_custom_expiry_controls_entry_expiry(self) -> None:
+        workspace = app.create_workspace("Short Lived", expiry_seconds=60)
+
+        app.add_text_entry("brief", workspace_id=workspace["id"])
+
+        snapshot = app.get_snapshot(workspace["id"])
+        self.assertEqual(snapshot["expires_after_seconds"], 60)
+        self.assertEqual(snapshot["texts"][0]["expires_at"], self.current_time + 60)
+
+        self.current_time += 61
+        self.assertEqual(app.get_snapshot(workspace["id"])["texts"], [])
+
+    def test_workspace_infinite_expiry_keeps_entries_and_workspace(self) -> None:
+        workspace = app.create_workspace("Permanent", expiry_seconds=0)
+
+        app.add_text_entry("kept", workspace_id=workspace["id"])
+        self.current_time += app.EXPIRY_SECONDS * 10
+
+        listed = app.list_workspaces()
+        snapshot = app.get_snapshot(workspace["id"])
+        self.assertIn(workspace["id"], {item["id"] for item in listed})
+        self.assertEqual(snapshot["expires_after_seconds"], 0)
+        self.assertIsNone(snapshot["texts"][0]["expires_at"])
 
     def test_inactive_non_default_workspace_is_deleted_after_24_hours(self) -> None:
         workspace = app.create_workspace("Old Workspace")
@@ -381,6 +411,16 @@ class AppStateTests(unittest.TestCase):
 
         config.WORKSPACE_SUPER_PASSWORD = "override"
         deleted, delete_message = app.delete_workspace(workspace["id"], password="override")
+        self.assertTrue(deleted)
+        self.assertEqual(delete_message, "")
+        self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+    def test_can_delete_workspace_with_stored_super_password(self) -> None:
+        workspace = app.create_workspace("Secure", password="vault")
+        app.set_app_secrets(workspace_super_password="stored-override")
+
+        deleted, delete_message = app.delete_workspace(workspace["id"], password="stored-override")
+
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
@@ -800,6 +840,85 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(payload["workspace"]["name"], "qa-room")
         self.assertEqual(payload["workspace"]["slug"], "qa-room")
         self.assertTrue(payload["workspace"]["password_required"])
+        self.assertEqual(payload["workspace"]["expiry_seconds"], app.EXPIRY_SECONDS)
+
+    def test_workspace_creation_endpoint_accepts_custom_expiry(self) -> None:
+        self.start_server()
+
+        response = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps({"name": "QA Room", "password": "", "expiry_seconds": 0}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response["status"], 200)
+        payload = json.loads(response["body"])
+        self.assertEqual(payload["workspace"]["expiry_seconds"], 0)
+
+    def test_workspace_creation_endpoint_rejects_invalid_expiry(self) -> None:
+        self.start_server()
+
+        response = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps({"name": "QA Room", "password": "", "expiry_seconds": -1}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(response["status"], 400)
+
+    def test_settings_page_and_api_update_hashed_secrets(self) -> None:
+        self.start_server()
+
+        page = self.request("GET", "/settings")
+        self.assertEqual(page["status"], 200)
+        self.assertIn("DassieDrop Settings", page["text"])
+        cookie = page["headers"]["Set-Cookie"].split(";", 1)[0]
+        token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        response = self.request(
+            "POST",
+            "/api/settings",
+            body=json.dumps(
+                {
+                    "access_code": "stored-code",
+                    "api_key": "stored-api",
+                    "workspace_super_password": "stored-super",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(response["status"], 200)
+        payload = json.loads(response["body"])
+        self.assertTrue(payload["access_code_configured"])
+        self.assertTrue(payload["api_key_configured"])
+        self.assertTrue(payload["workspace_super_password_configured"])
+        settings = app.get_app_settings()
+        self.assertTrue(app.verify_password("stored-code", settings["access_code_hash"]))
+        self.assertTrue(app.verify_password("stored-api", settings["api_key_hash"]))
+        self.assertTrue(app.verify_password("stored-super", settings["workspace_super_password_hash"]))
+
+    def test_settings_access_code_is_used_for_login(self) -> None:
+        self.start_server()
+        app.set_app_secrets(access_code="stored-code")
+
+        blocked = self.request("GET", "/api/state")
+        self.assertEqual(blocked["status"], 401)
+
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"code": "stored-code"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(login["status"], 200)
 
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()

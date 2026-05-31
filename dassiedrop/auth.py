@@ -54,7 +54,7 @@ def get_session(handler: BaseHTTPRequestHandler) -> tuple[str | None, dict | Non
 
 
 def is_authorized(handler: BaseHTTPRequestHandler) -> bool:
-    if not config.ACCESS_CODE:
+    if not access_code_is_configured():
         return True
 
     if api_key_is_valid(handler):
@@ -64,16 +64,30 @@ def is_authorized(handler: BaseHTTPRequestHandler) -> bool:
     return session_id is not None
 
 
-def expected_api_key() -> str:
-    return config.API_KEY or config.ACCESS_CODE
+def access_code_is_configured() -> bool:
+    return bool(config.ACCESS_CODE or storage.get_app_settings().get("access_code_hash"))
+
+
+def access_code_is_valid(code: str) -> bool:
+    candidate = code.strip()
+    settings = storage.get_app_settings()
+    access_code_hash = settings.get("access_code_hash")
+    if access_code_hash:
+        return storage.secret_matches_hash(candidate, access_code_hash)
+    return bool(config.ACCESS_CODE) and bool(candidate) and hmac.compare_digest(candidate, config.ACCESS_CODE)
 
 
 def api_key_is_valid(handler: BaseHTTPRequestHandler) -> bool:
-    configured = expected_api_key()
-    if not configured:
-        return False
     api_key = handler.headers.get("X-API-Key", "").strip()
-    return bool(api_key) and hmac.compare_digest(api_key, configured)
+    if not api_key:
+        return False
+    settings = storage.get_app_settings()
+    api_key_hash = settings.get("api_key_hash")
+    if api_key_hash:
+        return storage.secret_matches_hash(api_key, api_key_hash)
+    if config.API_KEY:
+        return hmac.compare_digest(api_key, config.API_KEY)
+    return access_code_is_valid(api_key)
 
 
 def create_authorized_session(workspace_id: str | None = None) -> str:
@@ -225,7 +239,7 @@ def ensure_browser_session(handler: BaseHTTPRequestHandler) -> tuple[str | None,
     session_id, session = get_session(handler)
     if session_id is not None and session is not None:
         return (session_id, session, None)
-    if config.ACCESS_CODE:
+    if access_code_is_configured():
         return (None, None, None)
     session_id = create_authorized_session()
     with state.session_lock:

@@ -1,5 +1,4 @@
 import html
-import hmac
 import json
 import logging
 import shutil
@@ -198,6 +197,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_workspaces_page()
             return
 
+        if parsed.path == "/settings":
+            self.handle_settings_page()
+            return
+
         if parsed.path == "/help":
             self.handle_help_page()
             return
@@ -212,10 +215,17 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/workspaces":
-            if config.ACCESS_CODE and not auth.is_authorized(self):
+            if auth.access_code_is_configured() and not auth.is_authorized(self):
                 self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
                 return
             self.send_json(self.workspace_list_payload())
+            return
+
+        if parsed.path == "/api/settings":
+            if auth.access_code_is_configured() and not auth.is_authorized(self):
+                self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+                return
+            self.send_json(storage.serialize_app_settings())
             return
 
         if parsed.path.startswith("/s/"):
@@ -223,7 +233,7 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_short_link(short_code, auth.requested_access_password(self))
             return
 
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
             return
 
@@ -281,12 +291,16 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.FORBIDDEN, "CSRF token required")
             return
 
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
             return
 
         if parsed.path == "/api/workspaces":
             self.handle_workspace_create()
+            return
+
+        if parsed.path == "/api/settings":
+            self.handle_settings_update()
             return
 
         if parsed.path.startswith("/api/workspaces/") and parsed.path.endswith("/enter"):
@@ -326,7 +340,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if not auth.validate_csrf(self):
             self.send_error(HTTPStatus.FORBIDDEN, "CSRF token required")
             return
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
             return
 
@@ -366,7 +380,7 @@ class AppHandler(BaseHTTPRequestHandler):
         }
 
     def handle_root(self) -> None:
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
 
@@ -397,7 +411,7 @@ class AppHandler(BaseHTTPRequestHandler):
         )
 
     def handle_workspaces_page(self) -> None:
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
 
@@ -415,7 +429,7 @@ class AppHandler(BaseHTTPRequestHandler):
         )
 
     def handle_help_page(self) -> None:
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
 
@@ -432,8 +446,26 @@ class AppHandler(BaseHTTPRequestHandler):
             cookie=cookie,
         )
 
+    def handle_settings_page(self) -> None:
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
+            self.send_html(render_template("login.html"))
+            return
+
+        _, session, cookie = auth.ensure_browser_session(self)
+        self.send_html(
+            render_template(
+                "settings.html",
+                {
+                    "__APP_VERSION__": html.escape(get_app_version()),
+                    "__UPDATE_NOTICE__": update_notice_html(),
+                    "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                },
+            ),
+            cookie=cookie,
+        )
+
     def handle_workspace_shortcut(self, workspace_slug_value: str) -> None:
-        if config.ACCESS_CODE and not auth.is_authorized(self):
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
 
@@ -475,7 +507,7 @@ class AppHandler(BaseHTTPRequestHandler):
         self.redirect("/", cookie=cookie)
 
     def handle_login(self) -> None:
-        if not config.ACCESS_CODE:
+        if not auth.access_code_is_configured():
             session_id = auth.create_authorized_session(config.DEFAULT_WORKSPACE_ID)
             self.send_json(
                 {"ok": True},
@@ -493,7 +525,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         code = payload.get("code", "")
-        if not isinstance(code, str) or not hmac.compare_digest(code, config.ACCESS_CODE):
+        if not isinstance(code, str) or not auth.access_code_is_valid(code):
             auth.record_throttle_failure(self, "login")
             self.send_error(HTTPStatus.UNAUTHORIZED, "Wrong access code")
             return
@@ -521,6 +553,10 @@ class AppHandler(BaseHTTPRequestHandler):
         if not isinstance(password, str):
             self.send_error(HTTPStatus.BAD_REQUEST, "Password must be a string")
             return
+        expiry_seconds = payload.get("expiry_seconds", config.EXPIRY_SECONDS)
+        if type(expiry_seconds) is not int or expiry_seconds < 0:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Expiry seconds must be a non-negative integer")
+            return
 
         allowed, retry_after = auth.consume_rate_limit_token(
             self,
@@ -532,7 +568,11 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_throttled("Too many workspaces created", retry_after)
             return
 
-        workspace = storage.create_workspace(name, password=password.strip())
+        workspace = storage.create_workspace(
+            name,
+            password=password.strip(),
+            expiry_seconds=expiry_seconds,
+        )
         self.send_json(
             {
                 "workspace": workspace,
@@ -540,6 +580,23 @@ class AppHandler(BaseHTTPRequestHandler):
                 "current_workspace_id": self.current_session_workspace_id(),
             }
         )
+
+    def handle_settings_update(self) -> None:
+        payload = self.parse_json_body()
+        if payload is None:
+            return
+        accepted_keys = ("access_code", "api_key", "workspace_super_password")
+        updates = {}
+        for key in accepted_keys:
+            if key not in payload:
+                continue
+            value = payload.get(key, "")
+            if not isinstance(value, str):
+                self.send_error(HTTPStatus.BAD_REQUEST, "Settings values must be strings")
+                return
+            updates[key] = value
+        settings = storage.set_app_secrets(**updates)
+        self.send_json(settings)
 
     def handle_workspace_enter(self, workspace_selector: str) -> None:
         session_id, session = auth.get_session(self)
@@ -639,7 +696,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 return None
             return workspace_id
 
-        if config.ACCESS_CODE:
+        if auth.access_code_is_configured():
             if auth.api_key_is_valid(self):
                 return config.DEFAULT_WORKSPACE_ID
             self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")

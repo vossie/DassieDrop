@@ -27,6 +27,17 @@ class AuthTests(CoreStateTestCase):
         authorized_handler = make_app_handler(headers={"X-API-Key": "secret-code"})
         self.assertTrue(auth.is_authorized(authorized_handler))
 
+    def test_hashed_settings_access_code_and_api_key_authorize_requests(self) -> None:
+        app.set_app_secrets(access_code="stored-code", api_key="stored-api")
+
+        unauthorized_handler = make_app_handler(headers={})
+        self.assertFalse(auth.is_authorized(unauthorized_handler))
+
+        api_handler = make_app_handler(headers={"X-API-Key": "stored-api"})
+        self.assertTrue(auth.is_authorized(api_handler))
+        self.assertTrue(auth.access_code_is_valid("stored-code"))
+        self.assertFalse(auth.access_code_is_valid("wrong"))
+
     def test_password_protected_items_require_correct_password(self) -> None:
         app.add_text_entry("classified", hidden=True, password="vault")
         entry = app.find_text_entry(app.get_snapshot()["texts"][0]["id"])

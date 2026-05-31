@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DassieDrop Settings</title>
+  <meta name="dassiedrop-csrf-token" content="__CSRF_TOKEN__">
+  <link rel="icon" type="image/png" href="/assets/DassieDrop-dassie-icon.png">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="header-bar">
+  <main class="shell shell-header">
+    <section class="hero">
+      <div class="hero-top">
+        <div class="hero-copy">
+          <div class="hero-title-row hero-title-row-workspace">
+            <div class="hero-brand-row">
+              <a class="hero-brand-link" href="https://github.com/vossie/DassieDrop" target="_blank" rel="noreferrer">
+                <img class="hero-mark" src="/assets/DassieDrop-dassie-icon.png" alt="">
+                <span class="hero-title-text">DassieDrop</span>
+              </a>
+            </div>
+            <div class="workspace-selector-wrap">
+              <a class="workspace-pill" href="/" aria-label="Back to main share page" title="Back to main share page">
+                <span class="workspace-pill-label">Back to Share</span>
+              </a>
+            </div>
+          </div>
+          <h1 class="sr-only">DassieDrop Settings</h1>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<main class="shell">
+  <section class="grid">
+    <article class="panel tab-panel workspace-panel">
+      <div class="panel-title">
+        <h2>Security Settings</h2>
+        <div class="meta">Leave a field blank to keep its current value. Use the clear checkbox to remove a stored setting.</div>
+      </div>
+      <div class="settings-form">
+        <label class="settings-field" for="settingsAccessCode">
+          <span>App access code</span>
+          <input id="settingsAccessCode" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New access code">
+        </label>
+        <label class="checkbox-row settings-clear-row" for="clearAccessCode">
+          <input id="clearAccessCode" type="checkbox">
+          <span>Clear stored app access code</span>
+        </label>
+
+        <label class="settings-field" for="settingsApiKey">
+          <span>API key</span>
+          <input id="settingsApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New API key">
+        </label>
+        <label class="checkbox-row settings-clear-row" for="clearApiKey">
+          <input id="clearApiKey" type="checkbox">
+          <span>Clear stored API key</span>
+        </label>
+
+        <label class="settings-field" for="settingsSuperPassword">
+          <span>Workspace super password</span>
+          <input id="settingsSuperPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New super password">
+        </label>
+        <label class="checkbox-row settings-clear-row" for="clearSuperPassword">
+          <input id="clearSuperPassword" type="checkbox">
+          <span>Clear stored workspace super password</span>
+        </label>
+
+        <button id="saveSettingsBtn" type="button">Save Settings</button>
+      </div>
+      <div class="status" id="settingsStatus"></div>
+      <dl class="settings-summary">
+        <div>
+          <dt>App access code</dt>
+          <dd id="accessCodeState">Loading</dd>
+        </div>
+        <div>
+          <dt>API key</dt>
+          <dd id="apiKeyState">Loading</dd>
+        </div>
+        <div>
+          <dt>Workspace super password</dt>
+          <dd id="superPasswordState">Loading</dd>
+        </div>
+        <div>
+          <dt>PBKDF2 iterations</dt>
+          <dd id="hashIterationsState">Loading</dd>
+        </div>
+      </dl>
+    </article>
+  </section>
+
+  <footer class="app-footer" aria-label="Licensing and privacy notice">
+    <p class="footer-line">
+      <a class="footer-link" href="/help">Help</a>
+      ·
+      <a class="footer-link" href="/openapi.yaml">OpenAPI</a>
+    </p>
+    <p class="footer-line">
+      DassieDrop v__APP_VERSION__
+    </p>
+    <p class="footer-line">
+      Copyright © 2026 DassieDrop contributors. Released under the ISC License.
+    </p>
+    <p class="footer-line">
+      ISC licensed. DassieDrop is intended only for devices and people you trust on your own network.
+    </p>
+    __UPDATE_NOTICE__
+  </footer>
+</main>
+<script src="/assets/settings.js"></script>
+</body>
+</html>

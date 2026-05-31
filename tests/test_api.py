@@ -212,7 +212,18 @@ class ApiContractHttpTests(CoreHttpTestCase):
         )
         self.assertEqual(
             set(payload["workspace"].keys()),
-            {"id", "name", "slug", "path", "password_required", "created_at", "updated_at", "text_count", "file_count"},
+            {
+                "id",
+                "name",
+                "slug",
+                "path",
+                "password_required",
+                "expiry_seconds",
+                "created_at",
+                "updated_at",
+                "text_count",
+                "file_count",
+            },
         )
 
     def test_latest_text_contract_headers_and_keys_are_stable(self) -> None:

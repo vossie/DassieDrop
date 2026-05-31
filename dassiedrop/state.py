@@ -15,6 +15,11 @@ shared_state = {
     "workspaces": {},
     "reserved_upload_bytes": 0,
     "reserved_upload_names": set(),
+    "app_settings": {
+        "access_code_hash": None,
+        "api_key_hash": None,
+        "workspace_super_password_hash": None,
+    },
     "update_check": {
         "checking": False,
         "last_checked_at": 0.0,

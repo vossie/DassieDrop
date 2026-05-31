@@ -19,6 +19,11 @@ def reset_app_state() -> None:
         state.shared_state["workspaces"] = {}
         state.shared_state["reserved_upload_bytes"] = 0
         state.shared_state["reserved_upload_names"] = set()
+        state.shared_state["app_settings"] = {
+            "access_code_hash": None,
+            "api_key_hash": None,
+            "workspace_super_password_hash": None,
+        }
         state.shared_state["update_check"] = {
             "checking": False,
             "last_checked_at": 0.0,

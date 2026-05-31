@@ -747,6 +747,11 @@ components:
       properties:
         password:
           type: string
+        expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Workspace item and inactivity expiry in seconds. Use `0` for no expiry.
       additionalProperties: false
     WorkspacePasswordRequest:
       allOf:
@@ -769,6 +774,7 @@ components:
         - slug
         - path
         - password_required
+        - expiry_seconds
         - created_at
         - updated_at
         - text_count
@@ -784,6 +790,10 @@ components:
           type: string
         password_required:
           type: boolean
+        expiry_seconds:
+          type: integer
+          minimum: 0
+          description: Workspace item and inactivity expiry in seconds. `0` means no expiry.
         created_at:
           type: number
         updated_at:
@@ -856,7 +866,9 @@ components:
         created_at:
           type: number
         expires_at:
-          type: number
+          type:
+            - number
+            - 'null'
         masked_content:
           type: string
         content:
@@ -902,7 +914,9 @@ components:
         created_at:
           type: number
         expires_at:
-          type: number
+          type:
+            - number
+            - 'null'
     WorkspaceSnapshot:
       type: object
       required:
@@ -919,6 +933,8 @@ components:
           type: number
         expires_after_seconds:
           type: integer
+          minimum: 0
+          description: Workspace expiry policy in seconds. `0` means no expiry.
         latest_text:
           type: string
         texts:

@@ -932,6 +932,19 @@ input[type="file"] {
 .workspace-create-row {
   width: 100%;
 }
+.workspace-expiry-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.workspace-expiry-select {
+  width: auto;
+  min-width: 150px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
 .workspace-create-row .hidden-options {
   width: auto;
   flex: 1 1 320px;
@@ -960,6 +973,41 @@ input[type="file"] {
 }
 .workspace-cancel-btn:hover {
   background: #e4ebf4;
+}
+.settings-form {
+  display: grid;
+  gap: 12px;
+}
+.settings-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.settings-input {
+  width: min(100%, 420px);
+}
+.settings-clear-row {
+  margin-top: -4px;
+}
+.settings-summary {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+}
+.settings-summary div {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.settings-summary dt {
+  color: var(--muted);
+}
+.settings-summary dd {
+  margin: 0;
+  font-weight: 650;
 }
 .dropzone {
   margin-top: 12px;
@@ -1103,6 +1151,10 @@ input[type="file"] {
     padding-top: 0;
   }
   .workspace-auth-input {
+    width: 100%;
+  }
+  .workspace-expiry-label,
+  .workspace-expiry-select {
     width: 100%;
   }
   .workspace-auth-row button {

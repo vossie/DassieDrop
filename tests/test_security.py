@@ -28,6 +28,8 @@ class SecurityTests(CoreStateTestCase):
         second = storage.hash_password("vault")
 
         self.assertNotEqual(first, second)
+        self.assertTrue(first.startswith("pbkdf2_sha256$"))
+        self.assertIn("$600000$", first)
         self.assertTrue(storage.verify_password("vault", first))
         self.assertFalse(storage.verify_password("wrong", first))
 

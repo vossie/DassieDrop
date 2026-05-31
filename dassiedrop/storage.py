@@ -103,15 +103,34 @@ def make_workspace_id() -> str:
     return secrets.token_hex(6)
 
 
-def hash_password(password: str) -> str:
+PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
+PASSWORD_HASH_ITERATIONS = 600_000
+
+
+def hash_password(password: str, iterations: int = PASSWORD_HASH_ITERATIONS) -> str:
     salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
-    return f"{salt.hex()}:{digest.hex()}"
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return f"{PASSWORD_HASH_SCHEME}${iterations}${salt.hex()}${digest.hex()}"
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
     if password_hash is None:
         return True
+    if password_hash.startswith(f"{PASSWORD_HASH_SCHEME}$"):
+        parts = password_hash.split("$", 3)
+        if len(parts) != 4:
+            return False
+        _, iterations_value, salt_hex, digest_hex = parts
+        try:
+            iterations = int(iterations_value)
+            salt = bytes.fromhex(salt_hex)
+            expected = bytes.fromhex(digest_hex)
+        except ValueError:
+            return False
+        if iterations <= 0:
+            return False
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        return hmac.compare_digest(actual, expected)
     if ":" not in password_hash:
         legacy = hashlib.sha256(password.encode("utf-8")).hexdigest()
         return hmac.compare_digest(legacy, password_hash)
@@ -163,6 +182,7 @@ def reset_shared_state_locked(workspaces: dict | None = None) -> None:
     state.shared_state["workspaces"] = {} if workspaces is None else workspaces
     state.shared_state["reserved_upload_bytes"] = 0
     state.shared_state["reserved_upload_names"] = set()
+    state.shared_state["app_settings"] = default_app_settings()
 
 
 def reserve_upload_capacity_locked(size: int) -> bool:
@@ -209,6 +229,7 @@ def release_upload_target_name_locked(name: str) -> None:
 def build_workspace(
     name: str,
     password_hash: str | None = None,
+    expiry_seconds: int | None = None,
     workspace_id: str | None = None,
     slug: str | None = None,
     created_at: float | None = None,
@@ -220,12 +241,33 @@ def build_workspace(
         "name": sanitize_workspace_name(name),
         "slug": (slug or workspace_slug(name)).strip().lower() or "workspace",
         "password_hash": password_hash,
+        "expiry_seconds": normalize_expiry_seconds(expiry_seconds),
         "created_at": timestamp,
         "updated_at": 0.0,
         "last_used_at": timestamp if last_used_at is None else last_used_at,
         "texts": [],
         "files": [],
     }
+
+
+def normalize_expiry_seconds(value: object) -> int:
+    if value is None or value == "":
+        return config.EXPIRY_SECONDS
+    try:
+        expiry_seconds = int(value)
+    except (TypeError, ValueError):
+        return config.EXPIRY_SECONDS
+    return max(0, expiry_seconds)
+
+
+def workspace_expiry_seconds(workspace: dict) -> int:
+    return normalize_expiry_seconds(workspace.get("expiry_seconds"))
+
+
+def entry_expires_at(created_at: float, expiry_seconds: int) -> float | None:
+    if expiry_seconds <= 0:
+        return None
+    return created_at + expiry_seconds
 
 
 def ensure_default_workspace_locked() -> dict:
@@ -324,12 +366,18 @@ def trim_workspace_history_locked(workspace: dict, delete_files: bool = True) ->
 
 
 def prune_workspace_locked(workspace: dict) -> bool:
-    cutoff = config.now_ts() - config.EXPIRY_SECONDS
-    expired_files = [item for item in workspace["files"] if item["created_at"] < cutoff]
+    now = config.now_ts()
+    expired_files = [
+        item for item in workspace["files"] if item.get("expires_at") is not None and item["expires_at"] < now
+    ]
     before_texts = len(workspace["texts"])
     before_files = len(workspace["files"])
-    workspace["texts"] = [item for item in workspace["texts"] if item["created_at"] >= cutoff]
-    workspace["files"] = [item for item in workspace["files"] if item["created_at"] >= cutoff]
+    workspace["texts"] = [
+        item for item in workspace["texts"] if item.get("expires_at") is None or item["expires_at"] >= now
+    ]
+    workspace["files"] = [
+        item for item in workspace["files"] if item.get("expires_at") is None or item["expires_at"] >= now
+    ]
     for item in expired_files:
         target = upload_path(item["stored_name"])
         if target is not None and target.exists():
@@ -341,10 +389,13 @@ def prune_workspace_locked(workspace: dict) -> bool:
 def workspace_is_inactive_locked(workspace: dict) -> bool:
     if workspace["id"] == config.DEFAULT_WORKSPACE_ID:
         return False
+    expiry_seconds = workspace_expiry_seconds(workspace)
+    if expiry_seconds <= 0:
+        return False
     last_used_at = float(
         workspace.get("last_used_at") or workspace["updated_at"] or workspace["created_at"]
     )
-    return last_used_at < (config.now_ts() - config.EXPIRY_SECONDS)
+    return last_used_at < (config.now_ts() - expiry_seconds)
 
 
 def workspace_password_is_valid(workspace: dict, password: str) -> bool:
@@ -361,14 +412,18 @@ def workspace_delete_password_is_valid(workspace: dict, password: str) -> bool:
         candidate, config.WORKSPACE_SUPER_PASSWORD
     ):
         return True
+    if secret_matches_hash(candidate, get_app_settings().get("workspace_super_password_hash")):
+        return True
     return workspace_password_is_valid(workspace, candidate)
 
 
 def workspace_delete_uses_super_password(password: str) -> bool:
     candidate = password.strip()
-    return bool(config.WORKSPACE_SUPER_PASSWORD) and bool(candidate) and hmac.compare_digest(
+    if bool(config.WORKSPACE_SUPER_PASSWORD) and bool(candidate) and hmac.compare_digest(
         candidate, config.WORKSPACE_SUPER_PASSWORD
-    )
+    ):
+        return True
+    return secret_matches_hash(candidate, get_app_settings().get("workspace_super_password_hash"))
 
 
 def serialize_workspace_summary(workspace: dict) -> dict:
@@ -379,6 +434,7 @@ def serialize_workspace_summary(workspace: dict) -> dict:
         "slug": slug,
         "path": f"/w/{slug}",
         "password_required": bool(workspace.get("password_hash")),
+        "expiry_seconds": workspace_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
         "updated_at": workspace["updated_at"],
         "text_count": len(workspace["texts"]),
@@ -392,6 +448,7 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
         "name": workspace["name"],
         "slug": workspace_slug_value(workspace),
         "password_hash": workspace.get("password_hash"),
+        "expiry_seconds": workspace_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
         "updated_at": workspace["updated_at"],
         "last_used_at": workspace.get("last_used_at", workspace["created_at"]),
@@ -401,6 +458,75 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
 
 
 PERSISTED_PAYLOAD_KEY = "payload"
+PERSISTED_SETTINGS_KEY = "settings"
+
+
+def default_app_settings() -> dict:
+    return {
+        "access_code_hash": None,
+        "api_key_hash": None,
+        "workspace_super_password_hash": None,
+    }
+
+
+def normalize_app_settings(settings: object) -> dict:
+    normalized = default_app_settings()
+    if not isinstance(settings, dict):
+        return normalized
+    for key in normalized:
+        value = settings.get(key)
+        normalized[key] = value if isinstance(value, str) and value else None
+    return normalized
+
+
+def get_app_settings_locked() -> dict:
+    settings = state.shared_state.get("app_settings")
+    if not isinstance(settings, dict):
+        settings = default_app_settings()
+        state.shared_state["app_settings"] = settings
+    return settings
+
+
+def get_app_settings() -> dict:
+    with state.state_lock:
+        return dict(get_app_settings_locked())
+
+
+def secret_matches_hash(candidate: str, password_hash: str | None) -> bool:
+    return bool(candidate) and bool(password_hash) and verify_password(candidate, password_hash)
+
+
+def set_app_secrets(
+    access_code: str | None = None,
+    api_key: str | None = None,
+    workspace_super_password: str | None = None,
+) -> dict:
+    with state.state_lock:
+        settings = get_app_settings_locked()
+        if access_code is not None:
+            settings["access_code_hash"] = hash_password(access_code.strip()) if access_code.strip() else None
+        if api_key is not None:
+            settings["api_key_hash"] = hash_password(api_key.strip()) if api_key.strip() else None
+        if workspace_super_password is not None:
+            settings["workspace_super_password_hash"] = (
+                hash_password(workspace_super_password.strip())
+                if workspace_super_password.strip()
+                else None
+            )
+        persist_state_locked()
+        return serialize_app_settings(settings)
+
+
+def serialize_app_settings(settings: dict | None = None) -> dict:
+    source = get_app_settings() if settings is None else settings
+    return {
+        "access_code_configured": bool(config.ACCESS_CODE or source.get("access_code_hash")),
+        "api_key_configured": bool(config.API_KEY or source.get("api_key_hash")),
+        "workspace_super_password_configured": bool(
+            config.WORKSPACE_SUPER_PASSWORD or source.get("workspace_super_password_hash")
+        ),
+        "password_hash_iterations": PASSWORD_HASH_ITERATIONS,
+    }
 
 
 def persisted_payload() -> dict:
@@ -435,6 +561,17 @@ def read_shelved_payload() -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def read_shelved_settings() -> dict:
+    if not shelve_index_exists():
+        return default_app_settings()
+    try:
+        with shelve.open(str(uploads_index_path()), flag="r") as index:
+            settings = index.get(PERSISTED_SETTINGS_KEY, {})
+    except Exception:
+        return default_app_settings()
+    return normalize_app_settings(settings)
+
+
 def read_legacy_json_payload() -> dict:
     index_path = legacy_uploads_index_path()
     if not index_path.exists():
@@ -446,12 +583,17 @@ def read_legacy_json_payload() -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def persist_workspaces_locked() -> None:
+def persist_state_locked() -> None:
     ensure_upload_dir()
     ensure_default_workspace_locked()
     with shelve.open(str(uploads_index_path()), flag="n") as index:
         index[PERSISTED_PAYLOAD_KEY] = persisted_payload()
+        index[PERSISTED_SETTINGS_KEY] = normalize_app_settings(get_app_settings_locked())
         index.sync()
+
+
+def persist_workspaces_locked() -> None:
+    persist_state_locked()
 
 
 def load_persisted_workspaces() -> None:
@@ -477,11 +619,17 @@ def load_persisted_workspaces() -> None:
             return default
         return restored
 
-    def restore_text_entry(text_item: dict) -> dict | None:
+    def restore_expires_at(value: object, created_at: float, expiry_seconds: int) -> float | None:
+        if value is None:
+            return None if expiry_seconds <= 0 else created_at + expiry_seconds
+        return restore_float(value, config.now_ts() + expiry_seconds) if expiry_seconds > 0 else None
+
+    def restore_text_entry(text_item: dict, expiry_seconds: int) -> dict | None:
         content = text_item.get("content")
         if not isinstance(content, str):
             return None
         now = config.now_ts()
+        created_at = restore_float(text_item.get("created_at"), now)
         short_code = str(text_item.get("short_code") or "").strip()
         if not short_code or short_code in restored_short_codes:
             while True:
@@ -499,13 +647,11 @@ def load_persisted_workspaces() -> None:
             "sharer_name": str(text_item.get("sharer_name") or "").strip(),
             "sharer_ip": str(text_item.get("sharer_ip") or "").strip(),
             "short_code": short_code,
-            "created_at": restore_float(text_item.get("created_at"), now),
-            "expires_at": restore_float(
-                text_item.get("expires_at"), now + config.EXPIRY_SECONDS
-            ),
+            "created_at": created_at,
+            "expires_at": restore_expires_at(text_item.get("expires_at"), created_at, expiry_seconds),
         }
 
-    def restore_file_entry(file_item: dict) -> dict | None:
+    def restore_file_entry(file_item: dict, expiry_seconds: int) -> dict | None:
         stored_name = file_item.get("stored_name")
         if not isinstance(stored_name, str):
             return None
@@ -520,6 +666,7 @@ def load_persisted_workspaces() -> None:
                 if short_code not in restored_short_codes:
                     break
         restored_short_codes.add(short_code)
+        created_at = restore_float(file_item.get("created_at"), now)
         return {
             "id": str(file_item.get("id") or make_id()),
             "name": sanitize_filename(str(file_item.get("name") or stored_name)),
@@ -532,12 +679,11 @@ def load_persisted_workspaces() -> None:
             "sharer_name": str(file_item.get("sharer_name") or "").strip(),
             "sharer_ip": str(file_item.get("sharer_ip") or "").strip(),
             "short_code": short_code,
-            "created_at": restore_float(file_item.get("created_at"), now),
-            "expires_at": restore_float(
-                file_item.get("expires_at"), now + config.EXPIRY_SECONDS
-            ),
+            "created_at": created_at,
+            "expires_at": restore_expires_at(file_item.get("expires_at"), created_at, expiry_seconds),
         }
 
+    settings = read_shelved_settings()
     payload = read_shelved_payload() or read_legacy_json_payload()
     if payload:
         raw_workspaces = payload.get("workspaces")
@@ -551,6 +697,7 @@ def load_persisted_workspaces() -> None:
                     password_hash=item.get("password_hash")
                     if isinstance(item.get("password_hash"), str)
                     else None,
+                    expiry_seconds=normalize_expiry_seconds(item.get("expiry_seconds")),
                     workspace_id=workspace_id,
                     slug=str(item.get("slug") or workspace_slug(str(item.get("name") or config.DEFAULT_WORKSPACE_NAME))),
                     created_at=restore_float(item.get("created_at"), config.now_ts()),
@@ -563,10 +710,11 @@ def load_persisted_workspaces() -> None:
                 if not isinstance(raw_texts, list):
                     raw_texts = []
                 restored_texts = []
+                expiry_seconds = workspace_expiry_seconds(workspace)
                 for text_item in raw_texts:
                     if not isinstance(text_item, dict):
                         continue
-                    restored = restore_text_entry(text_item)
+                    restored = restore_text_entry(text_item, expiry_seconds)
                     if restored is not None:
                         restored_texts.append(restored)
                 restored_texts.sort(key=lambda entry: entry["created_at"], reverse=True)
@@ -578,7 +726,7 @@ def load_persisted_workspaces() -> None:
                 for file_item in raw_files:
                     if not isinstance(file_item, dict):
                         continue
-                    restored = restore_file_entry(file_item)
+                    restored = restore_file_entry(file_item, expiry_seconds)
                     if restored is not None:
                         restored_files.append(restored)
                 restored_files.sort(key=lambda entry: entry["created_at"], reverse=True)
@@ -608,7 +756,7 @@ def load_persisted_workspaces() -> None:
                 for file_item in raw_files:
                     if not isinstance(file_item, dict):
                         continue
-                    restored = restore_file_entry(file_item)
+                    restored = restore_file_entry(file_item, workspace_expiry_seconds(workspace))
                     if restored is not None:
                         restored_files.append(restored)
                 restored_files.sort(key=lambda entry: entry["created_at"], reverse=True)
@@ -619,6 +767,7 @@ def load_persisted_workspaces() -> None:
 
     with state.state_lock:
         reset_shared_state_locked(loaded_workspaces)
+        state.shared_state["app_settings"] = settings
         ensure_default_workspace_locked()
         persist_workspaces_locked()
 
@@ -704,7 +853,7 @@ def serialize_workspace_payload(workspace: dict) -> dict:
     return {
         "workspace": serialize_workspace_summary(workspace),
         "updated_at": workspace["updated_at"],
-        "expires_after_seconds": config.EXPIRY_SECONDS,
+        "expires_after_seconds": workspace_expiry_seconds(workspace),
         "latest_text": ""
         if not workspace["texts"]
         else (
@@ -765,7 +914,7 @@ def make_unique_short_code_locked() -> str:
             return candidate
 
 
-def create_workspace(name: str, password: str = "") -> dict:
+def create_workspace(name: str, password: str = "", expiry_seconds: int | None = None) -> dict:
     workspace_name = sanitize_workspace_name(name)
     password_hash = hash_password(password.strip()) if password.strip() else None
     with state.state_lock:
@@ -774,6 +923,7 @@ def create_workspace(name: str, password: str = "") -> dict:
             workspace_name,
             slug=make_unique_workspace_slug_locked(workspace_name),
             password_hash=password_hash,
+            expiry_seconds=expiry_seconds,
         )
         state.shared_state["workspaces"][workspace["id"]] = workspace
         persist_workspaces_locked()
@@ -855,6 +1005,7 @@ def add_text_entry(
         if workspace is None:
             workspace = ensure_default_workspace_locked()
         prune_workspace_locked(workspace)
+        expiry_seconds = workspace_expiry_seconds(workspace)
         created_at = config.now_ts()
         workspace["texts"].insert(
             0,
@@ -867,7 +1018,7 @@ def add_text_entry(
                 "sharer_ip": sharer_ip.strip(),
                 "short_code": make_unique_short_code_locked(),
                 "created_at": created_at,
-                "expires_at": created_at + config.EXPIRY_SECONDS,
+                "expires_at": entry_expires_at(created_at, expiry_seconds),
             },
         )
         trim_workspace_history_locked(workspace)
@@ -907,6 +1058,7 @@ def add_file(
         if workspace is None:
             workspace = ensure_default_workspace_locked()
         prune_workspace_locked(workspace)
+        expiry_seconds = workspace_expiry_seconds(workspace)
         previous_files = list(workspace["files"])
         previous_updated_at = workspace.get("updated_at", 0.0)
         previous_last_used_at = workspace.get("last_used_at", workspace["created_at"])
@@ -922,7 +1074,7 @@ def add_file(
             "sharer_ip": sharer_ip.strip(),
             "short_code": make_unique_short_code_locked(),
             "created_at": created_at,
-            "expires_at": created_at + config.EXPIRY_SECONDS,
+            "expires_at": entry_expires_at(created_at, expiry_seconds),
         }
         workspace["files"].insert(0, entry)
         overflow_files = trim_workspace_history_locked(workspace, delete_files=False)
