@@ -128,9 +128,14 @@ async function confirmTotp() {
     editUserStatus.textContent = "Authenticator enabled.";
   } catch (error) {
     confirmTotpBtn.disabled = false;
-    editUserStatus.textContent = error.message.includes("Authenticator setup has not been started")
-      ? "Authenticator setup expired. Click Set Up and scan the current QR again."
-      : "Wrong authenticator code. Check that it matches the current server check code shown above.";
+    const detail = String(error.message || "").trim();
+    if (detail.includes("Authenticator setup has not been started")) {
+      editUserStatus.textContent = "Authenticator setup expired. Click Set Up and scan the current QR again.";
+    } else if (detail) {
+      editUserStatus.textContent = `Authenticator setup failed: ${detail.split("\n")[0]}`;
+    } else {
+      editUserStatus.textContent = "Authenticator setup failed.";
+    }
   }
 }
 

@@ -305,15 +305,18 @@ class ManagementRoutesMixin:
         if not self.user_can_manage_totp(user_id, allow_root=False):
             self.send_error(HTTPStatus.FORBIDDEN, "User account required")
             return
+        payload = self.parse_json_body()
+        if payload is None:
+            return
         try:
-            payload = storage.begin_user_totp_setup(user_id)
+            setup_payload = storage.begin_user_totp_setup(user_id)
         except KeyError:
             self.send_error(HTTPStatus.NOT_FOUND, "User not found")
             return
         except ValueError as exc:
             self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
-        self.send_json(payload)
+        self.send_json(setup_payload)
 
     def handle_user_totp_confirm(self, user_id: str) -> None:
         if not self.user_can_manage_totp(user_id, allow_root=False):

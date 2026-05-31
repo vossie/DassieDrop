@@ -1627,7 +1627,7 @@ class HttpServerTests(unittest.TestCase):
         confirm_response = self.request(
             "POST",
             f"/api/users/{user_id}/totp/confirm",
-            body=json.dumps({"code": storage.totp_code(setup_payload["secret"], self.fake_now())}).encode("utf-8"),
+            body=json.dumps({"code": setup_payload["server_code"]}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": cookie,
@@ -1636,6 +1636,19 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(confirm_response["status"], 200)
         self.assertTrue(json.loads(confirm_response["body"])["user"]["totp_enabled"])
+
+        duplicate_confirm_response = self.request(
+            "POST",
+            f"/api/users/{user_id}/totp/confirm",
+            body=json.dumps({"code": setup_payload["server_code"]}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(duplicate_confirm_response["status"], 200)
+        self.assertTrue(json.loads(duplicate_confirm_response["body"])["user"]["totp_enabled"])
 
         disable_response = self.request(
             "DELETE",
@@ -1648,6 +1661,43 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(disable_response["status"], 200)
         self.assertFalse(json.loads(disable_response["body"])["user"]["totp_enabled"])
+
+    def test_user_totp_setup_drains_body_before_confirm_on_same_connection(self) -> None:
+        self.start_server()
+        cookie = self.root_cookie()
+        user_id = next(user["id"] for user in storage.list_users() if user["username"] == "admin")
+        token = self.csrf_token(cookie)
+        headers = {
+            "Content-Type": "application/json",
+            "Cookie": cookie,
+            "X-CSRF-Token": token,
+        }
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            connection.request(
+                "POST",
+                f"/api/users/{user_id}/totp/setup",
+                body=b"{}",
+                headers=headers,
+            )
+            setup_response = connection.getresponse()
+            setup_payload = setup_response.read()
+            self.assertEqual(setup_response.status, 200)
+            setup = json.loads(setup_payload)
+
+            connection.request(
+                "POST",
+                f"/api/users/{user_id}/totp/confirm",
+                body=json.dumps({"code": setup["server_code"]}).encode("utf-8"),
+                headers=headers,
+            )
+            confirm_response = connection.getresponse()
+            confirm_payload = confirm_response.read()
+        finally:
+            connection.close()
+
+        self.assertEqual(confirm_response.status, 200, confirm_payload.decode("utf-8", errors="replace"))
+        self.assertTrue(json.loads(confirm_payload)["user"]["totp_enabled"])
 
     def test_users_pages_and_api_store_hashed_user_secrets(self) -> None:
         self.start_server()

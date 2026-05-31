@@ -16,7 +16,7 @@
 - Restricted workspace password override to the logged-in admin/root user's own password; normal users can no longer unlock a workspace with someone else's privileged password.
 - Added versioned CSS and JavaScript asset URLs so upgraded deployments do not keep using stale login/workspace styling from the browser cache.
 - Migrated legacy app access-code and API-key hashes into the first `admin` root user during 1.0.x upgrades, including repair for installs that already bootstrapped `admin/password`.
-- Added optional per-user authenticator app login codes with dependency-free TOTP and QR-code setup, including shorter Google Authenticator-compatible QR payloads, stable pending setup secrets, setup-code verification, duplicate-submit protection, visible server time, and wider clock-skew tolerance.
+- Added optional per-user authenticator app login codes with dependency-free TOTP and QR-code setup, including shorter Google Authenticator-compatible QR payloads, stable pending setup secrets, setup-code verification, duplicate-submit protection, request-body draining for browser keep-alive requests, visible server time, and wider clock-skew tolerance.
 - Updated the footer, workspace selector layout, mobile access controls, and password visibility controls.
 - Split the HTTP route handler into focused route mixins to make routing, pages, management actions, uploads, static serving, and WebSockets easier to maintain.
 
