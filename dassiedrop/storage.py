@@ -710,16 +710,41 @@ def ensure_bootstrap_root_user_locked() -> bool:
         return False
     now = config.now_ts()
     user_id = make_user_id()
-    password_hash = hash_password("password")
+    settings = get_app_settings_locked()
+    password_hash = settings.get("access_code_hash") or hash_password("password")
+    api_key_hash = settings.get("api_key_hash") or password_hash
     get_users_locked()[user_id] = {
         "id": user_id,
         "username": "admin",
         "role": "root",
         "password_hash": password_hash,
-        "api_key_hash": password_hash,
+        "api_key_hash": api_key_hash,
         "created_at": now,
         "updated_at": now,
     }
+    return True
+
+
+def repair_default_root_user_from_legacy_settings_locked() -> bool:
+    settings = get_app_settings_locked()
+    legacy_access_code_hash = settings.get("access_code_hash")
+    if not legacy_access_code_hash:
+        return False
+    users = get_users_locked()
+    if len(users) != 1:
+        return False
+    user = next(iter(users.values()))
+    if user.get("username", "").lower() != "admin":
+        return False
+    if normalize_user_role(user.get("role")) != "root":
+        return False
+    if not verify_password("password", user.get("password_hash")):
+        return False
+    if secret_matches_hash("password", legacy_access_code_hash):
+        return False
+    user["password_hash"] = legacy_access_code_hash
+    user["api_key_hash"] = settings.get("api_key_hash") or legacy_access_code_hash
+    user["updated_at"] = config.now_ts()
     return True
 
 
@@ -1136,6 +1161,7 @@ def load_persisted_workspaces() -> None:
         state.shared_state["default_workspace_deleted"] = bool(payload.get("default_workspace_deleted"))
         state.shared_state["app_settings"] = settings
         state.shared_state["users"] = users
+        repair_default_root_user_from_legacy_settings_locked()
         ensure_bootstrap_root_user_locked()
         if not state.shared_state["default_workspace_deleted"]:
             ensure_default_workspace_locked()

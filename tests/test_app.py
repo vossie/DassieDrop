@@ -618,6 +618,61 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(app.verify_password("password", user["password_hash"]))
         self.assertTrue(app.verify_password("password", user["api_key_hash"]))
 
+    def test_startup_bootstraps_root_user_from_legacy_app_settings(self) -> None:
+        legacy_access_hash = storage.hash_password("old-access-code")
+        legacy_api_hash = storage.hash_password("old-api-key")
+        with state.state_lock:
+            state.shared_state["app_settings"] = {
+                "access_code_hash": legacy_access_hash,
+                "api_key_hash": legacy_api_hash,
+                "workspace_super_password_hash": None,
+            }
+            app.persist_workspaces_locked()
+        reset_app_state()
+
+        app.load_persisted_workspaces()
+
+        users = storage.read_shelved_users()
+        self.assertEqual(len(users), 1)
+        user = next(iter(users.values()))
+        self.assertEqual(user["username"], "admin")
+        self.assertEqual(user["role"], "root")
+        self.assertTrue(app.verify_password("old-access-code", user["password_hash"]))
+        self.assertTrue(app.verify_password("old-api-key", user["api_key_hash"]))
+        self.assertFalse(app.verify_password("password", user["password_hash"]))
+
+    def test_startup_repairs_default_root_user_from_legacy_app_settings(self) -> None:
+        legacy_access_hash = storage.hash_password("old-access-code")
+        legacy_api_hash = storage.hash_password("old-api-key")
+        now = self.fake_now()
+        with state.state_lock:
+            state.shared_state["app_settings"] = {
+                "access_code_hash": legacy_access_hash,
+                "api_key_hash": legacy_api_hash,
+                "workspace_super_password_hash": None,
+            }
+            state.shared_state["users"] = {
+                "legacy-admin": {
+                    "id": "legacy-admin",
+                    "username": "admin",
+                    "role": "root",
+                    "password_hash": storage.hash_password("password"),
+                    "api_key_hash": storage.hash_password("password"),
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            }
+            app.persist_workspaces_locked()
+        reset_app_state()
+
+        app.load_persisted_workspaces()
+
+        users = storage.read_shelved_users()
+        user = users["legacy-admin"]
+        self.assertTrue(app.verify_password("old-access-code", user["password_hash"]))
+        self.assertTrue(app.verify_password("old-api-key", user["api_key_hash"]))
+        self.assertFalse(app.verify_password("password", user["password_hash"]))
+
     def test_startup_does_not_bootstrap_when_root_user_exists(self) -> None:
         existing = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
 
