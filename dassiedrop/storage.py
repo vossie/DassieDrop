@@ -196,7 +196,7 @@ def totp_code(secret: str, timestamp: float | None = None) -> str:
     return str(value % (10 ** TOTP_DIGITS)).zfill(TOTP_DIGITS)
 
 
-def totp_code_is_valid(secret: str, code: str, timestamp: float | None = None, window: int = 1) -> bool:
+def totp_code_is_valid(secret: str, code: str, timestamp: float | None = None, window: int = 4) -> bool:
     candidate = str(code or "").strip().replace(" ", "")
     if not re.fullmatch(r"\d{6}", candidate):
         return False
@@ -213,9 +213,6 @@ def totp_uri(username: str, secret: str) -> str:
         {
             "secret": secret,
             "issuer": TOTP_ISSUER,
-            "algorithm": "SHA1",
-            "digits": str(TOTP_DIGITS),
-            "period": str(TOTP_PERIOD_SECONDS),
         }
     )
     return f"otpauth://totp/{label}?{query}"
