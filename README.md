@@ -192,6 +192,19 @@ Optional expiry policies for uploaded files and text.
 
 Optional access codes and HTTPS support.
 
+If you lock yourself out after setting a stored access code, stop DassieDrop,
+reset the stored code, then start DassieDrop again:
+
+```bash
+python3 scripts/reset_access_code.py new-code
+```
+
+To remove the stored access code instead:
+
+```bash
+python3 scripts/reset_access_code.py --clear
+```
+
 ---
 
 ## Why "Dassie"?
