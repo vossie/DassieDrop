@@ -253,6 +253,7 @@ h1 {
 .workspace-selector-wrap {
   position: relative;
   display: inline-flex;
+  gap: 8px;
   justify-self: end;
 }
 .workspace-pill-label {
