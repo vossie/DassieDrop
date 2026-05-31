@@ -1151,6 +1151,9 @@ input[type="file"] {
 .users-form {
   margin-bottom: 16px;
 }
+.user-self-hidden {
+  display: none;
+}
 .users-toolbar {
   display: flex;
   justify-content: flex-end;

@@ -43,7 +43,7 @@
       </div>
 
       <div class="settings-form users-form">
-        <label class="settings-field" for="editUserName">
+        <label class="settings-field" id="editUserNameField" for="editUserName">
           <span class="settings-label-row">
             <span>Username</span>
             <span class="settings-help" tabindex="0" data-tooltip="The name this person enters on the login screen.">?</span>
@@ -74,15 +74,15 @@
             </button>
           </div>
         </label>
-        <label class="settings-field" for="editUserRole">
+        <label class="settings-field" id="editUserRoleField" for="editUserRole">
           <span class="settings-label-row">
             <span>Role</span>
-            <span class="settings-help" tabindex="0" data-tooltip="User can access unprotected or password-known workspaces. Admin can access any workspace. Root can also manage settings and users.">?</span>
+            <span class="settings-help" tabindex="0" data-tooltip="User can access unprotected or password-known workspaces. Admin can access any workspace. Root can also manage all users.">?</span>
           </span>
           <select id="editUserRole" class="inline-input settings-input">
             <option value="user">user - password-protected workspace access</option>
             <option value="admin">admin - any workspace access</option>
-            <option value="root">root - settings and user management</option>
+            <option value="root">root - user management</option>
           </select>
         </label>
         <div class="users-edit-actions">
@@ -98,8 +98,6 @@
   <footer class="app-footer" aria-label="Licensing and privacy notice">
     <p class="footer-line">
       <a class="footer-link" href="/users">Users</a>
-      ·
-      <a class="footer-link" href="/settings">Settings</a>
       ·
       <a class="footer-link" href="/help">Help</a>
     </p>

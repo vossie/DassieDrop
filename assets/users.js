@@ -2,6 +2,8 @@ const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
 const csrfToken = (csrfMeta && csrfMeta.content) || "";
 const usersStatus = document.getElementById("usersStatus");
 const usersList = document.getElementById("usersList");
+const usersToolbar = document.getElementById("usersToolbar");
+let canManageUsers = false;
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -19,6 +21,7 @@ function formatUserDate(ts) {
 
 function renderUsers(users) {
   usersList.innerHTML = "";
+  usersToolbar.classList.toggle("user-self-hidden", !canManageUsers);
   if (!users.length) {
     const li = document.createElement("li");
     li.className = "muted";
@@ -55,29 +58,31 @@ function renderUsers(users) {
     editLink.href = `/users/edit?id=${encodeURIComponent(user.id)}`;
     editLink.textContent = "Edit";
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "danger";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", async () => {
-      try {
-        const response = await fetch(`/api/users/${encodeURIComponent(user.id)}`, {
-          method: "DELETE",
-          headers: withCsrfHeaders({ "Content-Type": "application/json" })
-        });
-        if (!response.ok) {
-          throw new Error(`User delete failed: ${response.status}`);
-        }
-        const payload = await response.json();
-        renderUsers(payload.users || []);
-        usersStatus.textContent = "User deleted.";
-      } catch (error) {
-        usersStatus.textContent = "Could not delete user.";
-      }
-    });
-
     actions.appendChild(editLink);
-    actions.appendChild(deleteBtn);
+    if (canManageUsers) {
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "danger";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", async () => {
+        try {
+          const response = await fetch(`/api/users/${encodeURIComponent(user.id)}`, {
+            method: "DELETE",
+            headers: withCsrfHeaders({ "Content-Type": "application/json" })
+          });
+          if (!response.ok) {
+            throw new Error(`User delete failed: ${response.status}`);
+          }
+          const payload = await response.json();
+          canManageUsers = Boolean(payload.can_manage_users);
+          renderUsers(payload.users || []);
+          usersStatus.textContent = "User deleted.";
+        } catch (error) {
+          usersStatus.textContent = "Could not delete user.";
+        }
+      });
+      actions.appendChild(deleteBtn);
+    }
     li.appendChild(details);
     li.appendChild(actions);
     usersList.appendChild(li);
@@ -91,6 +96,7 @@ async function loadUsers() {
       throw new Error(`Users load failed: ${response.status}`);
     }
     const payload = await response.json();
+    canManageUsers = Boolean(payload.can_manage_users);
     renderUsers(payload.users || []);
   } catch (error) {
     usersStatus.textContent = "Could not load users.";

@@ -730,6 +730,28 @@ def update_user(
         return serialize_user(user)
 
 
+def update_user_secrets(
+    user_id: str,
+    password: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        raise ValueError("User ID required")
+    with state.state_lock:
+        users = get_users_locked()
+        user = users.get(clean_user_id)
+        if user is None:
+            raise KeyError("User not found")
+        if password is not None:
+            user["password_hash"] = hash_password(password.strip()) if password.strip() else None
+        if api_key is not None:
+            user["api_key_hash"] = hash_password(api_key.strip()) if api_key.strip() else None
+        user["updated_at"] = config.now_ts()
+        persist_state_locked()
+        return serialize_user(user)
+
+
 def delete_user(user_id: str) -> bool:
     clean_user_id = str(user_id or "").strip()
     if not clean_user_id:

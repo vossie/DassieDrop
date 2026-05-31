@@ -198,7 +198,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/settings":
-            self.handle_settings_page()
+            self.redirect("/users")
             return
 
         if parsed.path == "/users":
@@ -234,21 +234,14 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/settings":
-            if auth.access_code_is_configured() and not auth.is_authorized(self):
-                self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
-                return
-            if not self.require_root_user():
-                return
-            self.send_json({"security_managed_by": "users", "roles": list(storage.USER_ROLES)})
+            self.send_error(HTTPStatus.GONE, "User accounts manage security now")
             return
 
         if parsed.path == "/api/users":
             if auth.access_code_is_configured() and not auth.is_authorized(self):
                 self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
                 return
-            if not self.require_root_user():
-                return
-            self.send_json({"users": storage.list_users(), "roles": list(storage.USER_ROLES)})
+            self.send_json(self.users_payload())
             return
 
         if parsed.path.startswith("/s/"):
@@ -323,8 +316,6 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/settings":
-            if not self.require_root_user():
-                return
             self.handle_settings_update()
             return
 
@@ -335,8 +326,6 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path.startswith("/api/users/"):
-            if not self.require_root_user():
-                return
             user_id = urllib.parse.unquote(parsed.path.removeprefix("/api/users/"))
             self.handle_user_update(user_id)
             return
@@ -424,6 +413,21 @@ class AppHandler(BaseHTTPRequestHandler):
             "current_workspace_id": self.current_session_workspace_id(),
         }
 
+    def users_payload(self) -> dict:
+        current_user = auth.current_user(self)
+        current_user_id = str((current_user or {}).get("id") or "")
+        can_manage_users = auth.user_has_role(self, {"root"})
+        users = storage.list_users() if can_manage_users else []
+        if not can_manage_users and current_user_id:
+            user = storage.get_user(current_user_id)
+            users = [user] if user is not None else []
+        return {
+            "users": users,
+            "roles": list(storage.USER_ROLES),
+            "current_user_id": current_user_id,
+            "can_manage_users": can_manage_users,
+        }
+
     def require_root_user(self, html_response: bool = False) -> bool:
         if not auth.user_has_role(self, {"root"}):
             if html_response:
@@ -432,6 +436,17 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.send_error(HTTPStatus.FORBIDDEN, "Root user required")
             return False
         return True
+
+    def user_can_access_edit_user_page(self) -> bool:
+        if auth.user_has_role(self, {"root"}):
+            return True
+        parsed = urllib.parse.urlparse(self.path)
+        requested_user_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
+        current_user = auth.current_user(self)
+        if current_user is not None and requested_user_id == current_user.get("id"):
+            return True
+        self.send_error(HTTPStatus.FORBIDDEN, "User account required")
+        return False
 
     def handle_root(self) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
@@ -501,30 +516,11 @@ class AppHandler(BaseHTTPRequestHandler):
         )
 
     def handle_settings_page(self) -> None:
-        if auth.access_code_is_configured() and not auth.is_authorized(self):
-            self.send_html(render_template("login.html"))
-            return
-        if not self.require_root_user(html_response=True):
-            return
-
-        _, session, cookie = auth.ensure_browser_session(self)
-        self.send_html(
-            render_template(
-                "settings.html",
-                {
-                    "__APP_VERSION__": html.escape(get_app_version()),
-                    "__UPDATE_NOTICE__": update_notice_html(),
-                    "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
-                },
-            ),
-            cookie=cookie,
-        )
+        self.redirect("/users")
 
     def handle_users_page(self) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
-            return
-        if not self.require_root_user(html_response=True):
             return
 
         _, session, cookie = auth.ensure_browser_session(self)
@@ -564,7 +560,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
-        if not self.require_root_user(html_response=True):
+        if not self.user_can_access_edit_user_page():
             return
 
         _, session, cookie = auth.ensure_browser_session(self)
@@ -700,7 +696,7 @@ class AppHandler(BaseHTTPRequestHandler):
         )
 
     def handle_settings_update(self) -> None:
-        self.send_error(HTTPStatus.GONE, "Global security settings were replaced by users")
+        self.send_error(HTTPStatus.GONE, "User accounts manage security now")
 
     def handle_user_save(self) -> None:
         payload = self.parse_json_body()
@@ -727,11 +723,34 @@ class AppHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
-        self.send_json({"user": user, "users": storage.list_users(), "roles": list(storage.USER_ROLES)})
+        self.send_json({"user": user, **self.users_payload()})
 
     def handle_user_update(self, user_id: str) -> None:
         payload = self.parse_json_body()
         if payload is None:
+            return
+        if not auth.user_has_role(self, {"root"}):
+            current_user = auth.current_user(self)
+            if current_user is None or user_id != current_user.get("id"):
+                self.send_error(HTTPStatus.FORBIDDEN, "User account required")
+                return
+            password = payload.get("password", None)
+            api_key = payload.get("api_key", None)
+            if password is not None and not isinstance(password, str):
+                self.send_error(HTTPStatus.BAD_REQUEST, "Password must be a string")
+                return
+            if api_key is not None and not isinstance(api_key, str):
+                self.send_error(HTTPStatus.BAD_REQUEST, "API key must be a string")
+                return
+            try:
+                user = storage.update_user_secrets(user_id, password=password, api_key=api_key)
+            except KeyError:
+                self.send_error(HTTPStatus.NOT_FOUND, "User not found")
+                return
+            except ValueError as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            self.send_json({"user": user, **self.users_payload()})
             return
         username = payload.get("username", "")
         password = payload.get("password", None)
@@ -757,7 +776,7 @@ class AppHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
-        self.send_json({"user": user, "users": storage.list_users(), "roles": list(storage.USER_ROLES)})
+        self.send_json({"user": user, **self.users_payload()})
 
     def handle_user_delete(self, user_id: str) -> None:
         try:
@@ -768,7 +787,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if not deleted:
             self.send_error(HTTPStatus.NOT_FOUND, "User not found")
             return
-        self.send_json({"ok": True, "users": storage.list_users(), "roles": list(storage.USER_ROLES)})
+        self.send_json({"ok": True, **self.users_payload()})
 
     def handle_workspace_enter(self, workspace_selector: str) -> None:
         session_id, session = auth.get_session(self)

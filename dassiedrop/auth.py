@@ -92,11 +92,8 @@ def current_user(handler: BaseHTTPRequestHandler) -> dict | None:
     _, session = get_session(handler)
     if session is None:
         return None
-    return {
-        "id": session.get("user_id"),
-        "username": session.get("username"),
-        "role": session.get("role"),
-    }
+    user = storage.get_user(str(session.get("user_id") or ""))
+    return user
 
 
 def user_has_role(handler: BaseHTTPRequestHandler, roles: set[str]) -> bool:

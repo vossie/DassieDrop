@@ -1,12 +1,15 @@
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
 const csrfToken = (csrfMeta && csrfMeta.content) || "";
 const editUserName = document.getElementById("editUserName");
+const editUserNameField = document.getElementById("editUserNameField");
 const editUserPassword = document.getElementById("editUserPassword");
 const editUserApiKey = document.getElementById("editUserApiKey");
 const editUserRole = document.getElementById("editUserRole");
+const editUserRoleField = document.getElementById("editUserRoleField");
 const saveEditUserBtn = document.getElementById("saveEditUserBtn");
 const editUserStatus = document.getElementById("editUserStatus");
 const userId = new URLSearchParams(window.location.search).get("id") || "";
+let canManageUsers = false;
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -27,6 +30,7 @@ async function loadUser() {
       throw new Error(`Users load failed: ${response.status}`);
     }
     const payload = await response.json();
+    canManageUsers = Boolean(payload.can_manage_users);
     const user = (payload.users || []).find((candidate) => candidate.id === userId);
     if (!user) {
       editUserStatus.textContent = "User not found.";
@@ -35,6 +39,10 @@ async function loadUser() {
     }
     editUserName.value = user.username;
     editUserRole.value = user.role;
+    editUserName.disabled = !canManageUsers;
+    editUserRole.disabled = !canManageUsers;
+    editUserNameField.classList.toggle("user-self-hidden", !canManageUsers);
+    editUserRoleField.classList.toggle("user-self-hidden", !canManageUsers);
   } catch (error) {
     editUserStatus.textContent = "Could not load user.";
     saveEditUserBtn.disabled = true;
@@ -42,17 +50,17 @@ async function loadUser() {
 }
 
 async function saveEditUser() {
-  const username = editUserName.value.trim();
-  if (!username) {
-    editUserStatus.textContent = "Username required.";
-    editUserName.focus();
-    return;
+  const payload = {};
+  if (canManageUsers) {
+    const username = editUserName.value.trim();
+    if (!username) {
+      editUserStatus.textContent = "Username required.";
+      editUserName.focus();
+      return;
+    }
+    payload.username = username;
+    payload.role = editUserRole.value;
   }
-
-  const payload = {
-    username,
-    role: editUserRole.value
-  };
   if (editUserPassword.value) {
     payload.password = editUserPassword.value;
   }

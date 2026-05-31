@@ -621,6 +621,17 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(login["status"], 200)
         return login["headers"]["Set-Cookie"].split(";", 1)[0]
 
+    def user_cookie(self, username: str = "alice", password: str = "password") -> str:
+        storage.set_user(username, password=password, api_key=f"{username}-api", role="user")
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": username, "password": password}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        return login["headers"]["Set-Cookie"].split(";", 1)[0]
+
     def select_workspace(self, cookie: str, workspace: str = app.DEFAULT_WORKSPACE_ID, password: str = ""):
         page = self.request("GET", "/workspaces", headers={"Cookie": cookie})
         token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
@@ -950,16 +961,15 @@ class HttpServerTests(unittest.TestCase):
 
         self.assertEqual(response["status"], 400)
 
-    def test_settings_page_reports_user_managed_security(self) -> None:
+    def test_settings_redirects_to_users(self) -> None:
         self.start_server()
         cookie = self.root_cookie()
 
         page = self.request("GET", "/settings", headers={"Cookie": cookie})
-        self.assertEqual(page["status"], 200)
-        self.assertIn("DassieDrop Settings", page["text"])
-        self.assertIn("Security is managed through users", page["text"])
-        self.assertNotIn("settingsAccessCode", page["text"])
-        token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+        self.assertEqual(page["status"], 303)
+        self.assertEqual(page["headers"]["Location"], "/users")
+        users_page = self.request("GET", "/users", headers={"Cookie": cookie})
+        token = users_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
         response = self.request(
             "POST",
@@ -1123,6 +1133,87 @@ class HttpServerTests(unittest.TestCase):
         remaining_by_username = {user["username"]: user for user in remaining_users}
         self.assertEqual(remaining_by_username["admin"]["role"], "root")
         self.assertEqual(remaining_by_username["backup"]["role"], "root")
+
+    def test_non_root_user_only_manages_own_secrets(self) -> None:
+        self.start_server()
+        root = storage.set_user("root", password="root-pass", api_key="root-api", role="root")
+        user = storage.set_user("alice", password="alice-pass", api_key="alice-api", role="user")
+        cookie = self.user_cookie("alice", "alice-pass")
+
+        users_page = self.request("GET", "/users", headers={"Cookie": cookie})
+        self.assertEqual(users_page["status"], 200)
+        self.assertIn("DassieDrop Users", users_page["text"])
+        token = users_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        users_response = self.request("GET", "/api/users", headers={"Cookie": cookie})
+        self.assertEqual(users_response["status"], 200)
+        users_payload = json.loads(users_response["body"])
+        self.assertFalse(users_payload["can_manage_users"])
+        self.assertEqual([item["id"] for item in users_payload["users"]], [user["id"]])
+
+        new_user_page = self.request("GET", "/users/new", headers={"Cookie": cookie})
+        self.assertEqual(new_user_page["status"], 403)
+        create_response = self.request(
+            "POST",
+            "/api/users",
+            body=json.dumps({"username": "bob", "password": "bob-pass", "role": "root"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(create_response["status"], 403)
+
+        other_edit_page = self.request(
+            "GET",
+            f"/users/edit?id={root['id']}",
+            headers={"Cookie": cookie},
+        )
+        self.assertEqual(other_edit_page["status"], 403)
+        own_edit_page = self.request(
+            "GET",
+            f"/users/edit?id={user['id']}",
+            headers={"Cookie": cookie},
+        )
+        self.assertEqual(own_edit_page["status"], 200)
+
+        forbidden_update = self.request(
+            "POST",
+            f"/api/users/{root['id']}",
+            body=json.dumps({"password": "new-root-pass"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(forbidden_update["status"], 403)
+
+        self_update = self.request(
+            "POST",
+            f"/api/users/{user['id']}",
+            body=json.dumps(
+                {
+                    "username": "alice-root",
+                    "role": "root",
+                    "password": "new-alice-pass",
+                    "api_key": "new-alice-api",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(self_update["status"], 200)
+        updated_users = storage.read_shelved_users()
+        updated = updated_users[user["id"]]
+        self.assertEqual(updated["username"], "alice")
+        self.assertEqual(updated["role"], "user")
+        self.assertTrue(app.verify_password("new-alice-pass", updated["password_hash"]))
+        self.assertTrue(app.verify_password("new-alice-api", updated["api_key_hash"]))
 
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()
