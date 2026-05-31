@@ -6,6 +6,7 @@
 - Removed the temporary server check code from the authenticator setup UI.
 - Added an installed-service admin password reset script that also clears authenticator protection.
 - Restricted authenticator setup to the logged-in user's own account; super-admin users can disable another user's authenticator but cannot enroll one for them.
+- Allowed workspace owners, admins, and super-admin users to delete password-protected and explicit-access workspaces from the workspace list after confirmation, without entering the workspace password.
 
 ## 1.1.1 - 2026-05-31
 
