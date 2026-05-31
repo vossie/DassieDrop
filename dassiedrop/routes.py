@@ -504,6 +504,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.redirect("/workspaces", cookie=cookie)
             return
 
+        can_manage_access = (
+            storage.workspace_access_mode(workspace) == "explicit"
+            and self.user_can_manage_workspace(workspace)
+        )
         self.send_html(
             render_template(
                 "index.html",
@@ -513,10 +517,17 @@ class AppHandler(BaseHTTPRequestHandler):
                     "__UPDATE_NOTICE__": update_notice_html(),
                     "__WORKSPACE_NAME__": html.escape(storage.compact_workspace_name(workspace["name"])),
                     "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                    "__MANAGE_ACCESS_HEADER_LINK__": (
+                        '<a class="header-access-link" href="/workspaces/access" '
+                        'aria-label="Manage workspace access" title="Manage Access">'
+                        '<img class="header-lock-icon" src="/assets/access-lock.svg" alt="">'
+                        "</a>"
+                        if can_manage_access
+                        else ""
+                    ),
                     "__MANAGE_ACCESS_LINK__": (
                         '<a class="tabs-access-link" href="/workspaces/access">Manage Access</a>'
-                        if storage.workspace_access_mode(workspace) == "explicit"
-                        and self.user_can_manage_workspace(workspace)
+                        if can_manage_access
                         else ""
                     ),
                 },

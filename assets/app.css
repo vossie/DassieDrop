@@ -184,6 +184,33 @@ h1 {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+.header-access-link {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--accent);
+  text-decoration: none;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.header-access-link:hover {
+  background: #e4ebf4;
+  border-color: #c8d8f0;
+}
+.header-access-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.header-lock-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+}
 .tab-btn {
   min-width: 120px;
   gap: 8px;
@@ -1249,6 +1276,16 @@ input[type="file"] {
   color: var(--muted);
   font-size: 0.9rem;
 }
+@media (max-width: 900px) {
+  .header-access-link {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+  }
+  .tabs-access-link {
+    display: none;
+  }
+}
 @media (max-width: 720px) {
   .shell { padding: 18px; }
   .hero {
@@ -1380,10 +1417,6 @@ input[type="file"] {
   }
   .workspace-auth-row button {
     flex: 1 1 140px;
-  }
-  .tabs-access-link {
-    margin-left: 0;
-    flex-basis: 100%;
   }
   .access-manager {
     grid-template-columns: 1fr;
