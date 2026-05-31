@@ -13,10 +13,16 @@
   <h1>Sign In</h1>
   <p>Enter your DassieDrop username and password.</p>
   <input id="loginUsername" type="text" placeholder="Username" autocomplete="username" autofocus>
-  <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+  <div class="password-field-wrap">
+    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="password-toggle-btn" type="button" data-password-toggle="loginPassword">
+      <span class="password-eye-icon" aria-hidden="true"></span>
+    </button>
+  </div>
   <button id="loginBtn" type="button">Sign In</button>
   <div class="error" id="loginStatus"></div>
 </main>
+<script src="/assets/password-toggle.js"></script>
 <script src="/assets/login.js"></script>
 </body>
 </html>

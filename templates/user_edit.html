@@ -44,19 +44,41 @@
 
       <div class="settings-form users-form">
         <label class="settings-field" for="editUserName">
-          <span>Username</span>
+          <span class="settings-label-row">
+            <span>Username</span>
+            <span class="settings-help" tabindex="0" data-tooltip="The name this person enters on the login screen.">?</span>
+          </span>
           <input id="editUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
         </label>
         <label class="settings-field" for="editUserPassword">
-          <span>Password</span>
-          <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+          <span class="settings-label-row">
+            <span>Password</span>
+            <span class="settings-help" tabindex="0" data-tooltip="Leave blank to keep the current password. Root and admin passwords can unlock protected workspaces.">?</span>
+          </span>
+          <div class="password-field-wrap">
+            <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+            <button class="password-toggle-btn" type="button" data-password-toggle="editUserPassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </label>
         <label class="settings-field" for="editUserApiKey">
-          <span>API key</span>
-          <input id="editUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+          <span class="settings-label-row">
+            <span>API key</span>
+            <span class="settings-help" tabindex="0" data-tooltip="Leave blank to keep the current API key. Scripts send this secret in the X-API-Key header.">?</span>
+          </span>
+          <div class="password-field-wrap">
+            <input id="editUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+            <button class="password-toggle-btn" type="button" data-password-toggle="editUserApiKey">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </label>
         <label class="settings-field" for="editUserRole">
-          <span>Role</span>
+          <span class="settings-label-row">
+            <span>Role</span>
+            <span class="settings-help" tabindex="0" data-tooltip="User can access unprotected or password-known workspaces. Admin can access any workspace. Root can also manage settings and users.">?</span>
+          </span>
           <select id="editUserRole" class="inline-input settings-input">
             <option value="user">user - password-protected workspace access</option>
             <option value="admin">admin - any workspace access</option>
@@ -93,6 +115,7 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
+<script src="/assets/password-toggle.js"></script>
 <script src="/assets/user-edit.js"></script>
 </body>
 </html>

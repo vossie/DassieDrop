@@ -211,6 +211,22 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       authInput.autocomplete = "current-password";
       authInput.enterKeyHint = actionToRender === "delete" ? "done" : "go";
 
+      const authInputWrap = document.createElement("div");
+      authInputWrap.className = "password-field-wrap";
+      const authToggle = document.createElement("button");
+      authToggle.type = "button";
+      authToggle.className = "password-toggle-btn";
+      authToggle.setAttribute("data-password-toggle", "");
+      authToggle.setAttribute("aria-label", "Show password");
+      authToggle.setAttribute("title", "Show password");
+      authToggle.setAttribute("aria-pressed", "false");
+      const authToggleIcon = document.createElement("span");
+      authToggleIcon.className = "password-eye-icon";
+      authToggleIcon.setAttribute("aria-hidden", "true");
+      authToggle.appendChild(authToggleIcon);
+      authInputWrap.appendChild(authInput);
+      authInputWrap.appendChild(authToggle);
+
       const submitBtn = document.createElement("button");
       submitBtn.type = "button";
       submitBtn.textContent = actionToRender === "delete" ? "Delete Now" : "Open";
@@ -277,7 +293,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       });
 
       authRow.appendChild(authLabel);
-      authRow.appendChild(authInput);
+      authRow.appendChild(authInputWrap);
       authRow.appendChild(submitBtn);
       authRow.appendChild(cancelBtn);
       li.appendChild(authRow);

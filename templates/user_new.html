@@ -44,19 +44,41 @@
 
       <div class="settings-form users-form">
         <label class="settings-field" for="newUserName">
-          <span>Username</span>
+          <span class="settings-label-row">
+            <span>Username</span>
+            <span class="settings-help" tabindex="0" data-tooltip="The name this person enters on the login screen.">?</span>
+          </span>
           <input id="newUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
         </label>
         <label class="settings-field" for="newUserPassword">
-          <span>Password</span>
-          <input id="newUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+          <span class="settings-label-row">
+            <span>Password</span>
+            <span class="settings-help" tabindex="0" data-tooltip="The password used for browser login. Root and admin passwords can also unlock protected workspaces.">?</span>
+          </span>
+          <div class="password-field-wrap">
+            <input id="newUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+            <button class="password-toggle-btn" type="button" data-password-toggle="newUserPassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </label>
         <label class="settings-field" for="newUserApiKey">
-          <span>API key</span>
-          <input id="newUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+          <span class="settings-label-row">
+            <span>API key</span>
+            <span class="settings-help" tabindex="0" data-tooltip="The secret sent in the X-API-Key header for scripts and automation.">?</span>
+          </span>
+          <div class="password-field-wrap">
+            <input id="newUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+            <button class="password-toggle-btn" type="button" data-password-toggle="newUserApiKey">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </label>
         <label class="settings-field" for="newUserRole">
-          <span>Role</span>
+          <span class="settings-label-row">
+            <span>Role</span>
+            <span class="settings-help" tabindex="0" data-tooltip="User can access unprotected or password-known workspaces. Admin can access any workspace. Root can also manage settings and users.">?</span>
+          </span>
           <select id="newUserRole" class="inline-input settings-input">
             <option value="user">user - password-protected workspace access</option>
             <option value="admin">admin - any workspace access</option>
@@ -93,6 +115,7 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
+<script src="/assets/password-toggle.js"></script>
 <script src="/assets/user-new.js"></script>
 </body>
 </html>

@@ -72,7 +72,12 @@
           <span>Hidden</span>
         </label>
         <div class="hidden-options" id="textHiddenOptions">
-          <input id="textPassword" class="inline-input" type="password" placeholder="Optional password to reveal">
+          <div class="password-field-wrap">
+            <input id="textPassword" class="inline-input" type="password" placeholder="Optional password to reveal">
+            <button class="password-toggle-btn" type="button" data-password-toggle="textPassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
       </div>
       <div class="status" id="textStatus"></div>
@@ -93,7 +98,12 @@
           <span>Hidden file</span>
         </label>
         <div class="hidden-options" id="fileHiddenOptions">
-          <input id="filePassword" class="inline-input" type="password" placeholder="Password required for hidden files">
+          <div class="password-field-wrap">
+            <input id="filePassword" class="inline-input" type="password" placeholder="Password required for hidden files">
+            <button class="password-toggle-btn" type="button" data-password-toggle="filePassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
       </div>
       <div class="status" id="fileStatus"></div>
@@ -124,6 +134,7 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
+<script src="/assets/password-toggle.js"></script>
 <script src="/assets/app.js"></script>
 </body>
 </html>

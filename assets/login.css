@@ -59,6 +59,73 @@ input:focus {
   outline-offset: 2px;
   border-color: var(--accent-strong);
 }
+.password-field-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.password-field-wrap input {
+  padding-right: 48px;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.password-toggle-btn:hover {
+  background: #eef2f7;
+  color: var(--accent);
+}
+.password-toggle-btn:focus-visible {
+  outline: 2px solid rgba(11, 46, 99, 0.28);
+  outline-offset: 2px;
+}
+.password-eye-icon,
+.password-eye-icon::before,
+.password-eye-icon::after {
+  display: block;
+  position: absolute;
+}
+.password-eye-icon {
+  left: 8px;
+  top: 10px;
+  width: 16px;
+  height: 11px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+}
+.password-eye-icon::before {
+  content: "";
+  left: 5px;
+  top: 2.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.password-toggle-btn[aria-pressed="true"] .password-eye-icon::after {
+  content: "";
+  left: 6px;
+  top: -4px;
+  width: 2px;
+  height: 19px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: center;
+}
 button {
   margin-top: 12px;
   border: 0;

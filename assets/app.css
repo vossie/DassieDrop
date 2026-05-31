@@ -930,6 +930,76 @@ input[type="file"] {
 .workspace-input {
   width: min(100%, 420px);
 }
+.password-field-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: min(100%, 420px);
+}
+.password-field-wrap .inline-input,
+.password-field-wrap .settings-input,
+.password-field-wrap .workspace-input {
+  width: 100%;
+  padding-right: 46px;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.password-toggle-btn:hover {
+  background: #eef2f7;
+  color: var(--accent);
+}
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.password-eye-icon,
+.password-eye-icon::before,
+.password-eye-icon::after {
+  display: block;
+  position: absolute;
+}
+.password-eye-icon {
+  left: 8px;
+  top: 10px;
+  width: 16px;
+  height: 11px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+}
+.password-eye-icon::before {
+  content: "";
+  left: 5px;
+  top: 2.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.password-toggle-btn[aria-pressed="true"] .password-eye-icon::after {
+  content: "";
+  left: 6px;
+  top: -4px;
+  width: 2px;
+  height: 19px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: center;
+}
 .workspace-create-row {
   width: 100%;
 }
@@ -950,7 +1020,8 @@ input[type="file"] {
   width: auto;
   flex: 1 1 320px;
 }
-.workspace-create-row .inline-input {
+.workspace-create-row .inline-input,
+.workspace-create-row .password-field-wrap {
   width: 100%;
 }
 .workspace-auth-row {
@@ -964,6 +1035,9 @@ input[type="file"] {
   flex: 1 1 100%;
 }
 .workspace-auth-input {
+  width: min(100%, 320px);
+}
+.workspace-auth-row .password-field-wrap {
   width: min(100%, 320px);
 }
 .workspace-cancel-btn {

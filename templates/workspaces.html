@@ -61,7 +61,12 @@
           <span>Password protected</span>
         </label>
         <div class="hidden-options" id="workspacePasswordWrap">
-          <input id="workspacePassword" class="inline-input workspace-input" type="password" placeholder="Workspace password">
+          <div class="password-field-wrap">
+            <input id="workspacePassword" class="inline-input workspace-input" type="password" placeholder="Workspace password">
+            <button class="password-toggle-btn" type="button" data-password-toggle="workspacePassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
         </div>
       </div>
@@ -97,6 +102,7 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
+<script src="/assets/password-toggle.js"></script>
 <script src="/assets/workspaces.js"></script>
 </body>
 </html>
