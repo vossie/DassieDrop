@@ -149,6 +149,17 @@ h1 {
 .tabs-panel {
   padding: 12px 16px;
 }
+.tabs-access-link {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+.tabs-access-link:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
 .header-help-link {
   display: inline-flex;
   align-items: center;
@@ -1042,31 +1053,36 @@ input[type="file"] {
 .workspace-auth-row .password-field-wrap {
   width: min(100%, 320px);
 }
-.workspace-explicit-editor {
+.access-manager {
   display: grid;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
 }
-.workspace-user-choice-list {
-  display: flex;
-  flex-wrap: wrap;
+.access-column {
+  display: grid;
   gap: 8px;
 }
-.workspace-user-choice {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fafc;
-  color: var(--ink);
-  font-size: 0.92rem;
+.access-column h3 {
+  margin: 0;
+  font-size: 1rem;
 }
-.workspace-explicit-editor button {
-  justify-self: start;
+.access-select {
+  width: 100%;
+  min-height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  font: inherit;
+  color: var(--ink);
+}
+.access-transfer-actions {
+  display: grid;
+  gap: 10px;
+}
+.access-transfer-actions button {
+  white-space: nowrap;
 }
 .workspace-cancel-btn {
   background: #eef2f7;
@@ -1364,5 +1380,15 @@ input[type="file"] {
   }
   .workspace-auth-row button {
     flex: 1 1 140px;
+  }
+  .tabs-access-link {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .access-manager {
+    grid-template-columns: 1fr;
+  }
+  .access-transfer-actions {
+    grid-template-columns: 1fr 1fr;
   }
 }

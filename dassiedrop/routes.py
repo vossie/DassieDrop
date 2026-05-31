@@ -208,6 +208,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_workspaces_page()
             return
 
+        if parsed.path == "/workspaces/access":
+            self.handle_workspace_access_page()
+            return
+
         if parsed.path == "/settings":
             self.redirect("/users")
             return
@@ -242,6 +246,13 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
                 return
             self.send_json(self.workspace_list_payload())
+            return
+
+        if parsed.path == "/api/workspaces/access":
+            if auth.access_code_is_configured() and not auth.is_authorized(self):
+                self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
+                return
+            self.handle_workspace_access_payload()
             return
 
         if parsed.path == "/api/settings":
@@ -426,22 +437,9 @@ class AppHandler(BaseHTTPRequestHandler):
         return workspace_id
 
     def workspace_list_payload(self) -> dict:
-        current_user = auth.current_user(self)
-        users = []
-        if current_user is not None:
-            users = [
-                {
-                    "id": str(user.get("id") or ""),
-                    "username": str(user.get("username") or ""),
-                    "role": str(user.get("role") or ""),
-                }
-                for user in storage.list_users()
-            ]
         return {
             "workspaces": storage.list_workspaces(),
             "current_workspace_id": self.current_session_workspace_id(),
-            "current_user_id": str((current_user or {}).get("id") or ""),
-            "users": users,
         }
 
     def current_user_id(self) -> str:
@@ -515,6 +513,12 @@ class AppHandler(BaseHTTPRequestHandler):
                     "__UPDATE_NOTICE__": update_notice_html(),
                     "__WORKSPACE_NAME__": html.escape(storage.compact_workspace_name(workspace["name"])),
                     "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                    "__MANAGE_ACCESS_LINK__": (
+                        '<a class="tabs-access-link" href="/workspaces/access">Manage Access</a>'
+                        if storage.workspace_access_mode(workspace) == "explicit"
+                        and self.user_can_manage_workspace(workspace)
+                        else ""
+                    ),
                 },
             ),
             cookie=cookie,
@@ -533,6 +537,40 @@ class AppHandler(BaseHTTPRequestHandler):
                     "__APP_VERSION__": html.escape(get_app_version()),
                     "__UPDATE_NOTICE__": update_notice_html(),
                     "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                },
+            ),
+            cookie=cookie,
+        )
+
+    def handle_workspace_access_page(self) -> None:
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
+            self.send_html(render_template("login.html"))
+            return
+
+        session_id, session, cookie = auth.ensure_browser_session(self)
+        if session is None or session_id is None:
+            self.send_html(render_template("login.html"))
+            return
+        workspace_id = session.get("workspace_id")
+        workspace = storage.get_workspace(str(workspace_id or ""))
+        if workspace is None:
+            self.redirect("/workspaces", cookie=cookie)
+            return
+        if storage.workspace_access_mode(workspace) != "explicit":
+            self.redirect("/", cookie=cookie)
+            return
+        if not self.user_can_manage_workspace(workspace):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
+            return
+
+        self.send_html(
+            render_template(
+                "workspace_access.html",
+                {
+                    "__APP_VERSION__": html.escape(get_app_version()),
+                    "__UPDATE_NOTICE__": update_notice_html(),
+                    "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                    "__WORKSPACE_NAME__": html.escape(storage.compact_workspace_name(workspace["name"])),
                 },
             ),
             cookie=cookie,
@@ -906,6 +944,34 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
             return
         self.send_json({"workspace": workspace, **self.workspace_list_payload()})
+
+    def handle_workspace_access_payload(self) -> None:
+        workspace_id = self.current_session_workspace_id()
+        workspace = storage.get_workspace(str(workspace_id or ""))
+        if workspace is None:
+            self.send_error(HTTPStatus.CONFLICT, "Workspace not selected")
+            return
+        if storage.workspace_access_mode(workspace) != "explicit":
+            self.send_error(HTTPStatus.BAD_REQUEST, "Workspace is not explicit")
+            return
+        if not self.user_can_manage_workspace(workspace):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
+            return
+        users = [
+            {
+                "id": str(user.get("id") or ""),
+                "username": str(user.get("username") or ""),
+                "role": str(user.get("role") or ""),
+            }
+            for user in storage.list_users()
+        ]
+        self.send_json(
+            {
+                "workspace": storage.serialize_workspace_summary(workspace),
+                "users": users,
+                "current_user_id": self.current_user_id(),
+            }
+        )
 
     def handle_workspace_delete(self, workspace_id: str) -> None:
         payload = self.parse_json_body()

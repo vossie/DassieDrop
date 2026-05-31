@@ -11,8 +11,6 @@ const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
 const csrfToken = (csrfMeta && csrfMeta.content) || "";
 let pendingWorkspaceAction = null;
-let knownUsers = [];
-let currentUserId = "";
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -117,9 +115,7 @@ async function loadWorkspaces() {
     const payload = await response.json();
     renderWorkspaces(
       payload.workspaces || [],
-      payload.current_workspace_id || null,
-      payload.users || [],
-      payload.current_user_id || ""
+      payload.current_workspace_id || null
     );
   } catch (error) {
     setWorkspaceStatus("Could not load workspaces.");
@@ -136,102 +132,7 @@ function workspaceScopeLabel(workspace) {
   return "Public";
 }
 
-function currentUserCanManageWorkspace(workspace) {
-  const currentUser = knownUsers.find((user) => user.id === currentUserId);
-  const currentRole = currentUser ? currentUser.role : "";
-  return currentRole === "root" || currentRole === "admin" || workspace.owner_user_id === currentUserId;
-}
-
-async function saveExplicitWorkspaceUsers(workspace, selectedUserIds) {
-  try {
-    const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/users`, {
-      method: "POST",
-      headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ user_ids: selectedUserIds })
-    });
-    if (!response.ok) {
-      throw new Error(`Workspace users update failed: ${response.status}`);
-    }
-    const payload = await response.json();
-    renderWorkspaces(
-      payload.workspaces || [],
-      payload.current_workspace_id || null,
-      payload.users || [],
-      payload.current_user_id || ""
-    );
-    setWorkspaceStatus("Workspace access updated.");
-  } catch (error) {
-    setWorkspaceStatus("Could not update workspace access.");
-  }
-}
-
-function renderExplicitUserEditor(li, workspace) {
-  if (
-    workspace.id === "default" ||
-    workspace.access_mode !== "explicit" ||
-    !currentUserCanManageWorkspace(workspace)
-  ) {
-    return;
-  }
-
-  const editor = document.createElement("div");
-  editor.className = "workspace-explicit-editor";
-
-  const label = document.createElement("div");
-  label.className = "meta workspace-auth-label";
-  label.textContent = "Allowed users";
-  editor.appendChild(label);
-
-  const choices = document.createElement("div");
-  choices.className = "workspace-user-choice-list";
-  const selected = new Set(workspace.explicit_user_ids || []);
-
-  for (const user of knownUsers) {
-    if (!user.id || user.id === workspace.owner_user_id || user.role === "root" || user.role === "admin") {
-      continue;
-    }
-    const choice = document.createElement("label");
-    choice.className = "workspace-user-choice";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = user.id;
-    checkbox.checked = selected.has(user.id);
-
-    const name = document.createElement("span");
-    name.textContent = user.username || user.id;
-
-    choice.appendChild(checkbox);
-    choice.appendChild(name);
-    choices.appendChild(choice);
-  }
-
-  if (!choices.children.length) {
-    const empty = document.createElement("div");
-    empty.className = "meta";
-    empty.textContent = "No standard users exist yet.";
-    choices.appendChild(empty);
-  }
-
-  const saveBtn = document.createElement("button");
-  saveBtn.type = "button";
-  saveBtn.textContent = "Save Access";
-  saveBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const selectedUserIds = Array.from(choices.querySelectorAll("input[type='checkbox']:checked")).map(
-      (input) => input.value
-    );
-    saveExplicitWorkspaceUsers(workspace, selectedUserIds);
-  });
-
-  editor.appendChild(choices);
-  editor.appendChild(saveBtn);
-  li.appendChild(editor);
-}
-
-function renderWorkspaces(workspaces, currentWorkspaceId, users = knownUsers, userId = currentUserId) {
-  knownUsers = users;
-  currentUserId = userId;
+function renderWorkspaces(workspaces, currentWorkspaceId) {
   workspaceList.innerHTML = "";
   if (!workspaces.length) {
     const li = document.createElement("li");
@@ -304,9 +205,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId, users = knownUsers, us
         pendingWorkspaceAction = null;
         renderWorkspaces(
           payload.workspaces || [],
-          payload.current_workspace_id || null,
-          payload.users || [],
-          payload.current_user_id || ""
+          payload.current_workspace_id || null
         );
         setWorkspaceStatus("Workspace deleted.");
       } catch (error) {
@@ -441,8 +340,6 @@ function renderWorkspaces(workspaces, currentWorkspaceId, users = knownUsers, us
 
       window.setTimeout(() => authInput.focus(), 0);
     }
-
-    renderExplicitUserEditor(li, workspace);
     workspaceList.appendChild(li);
   }
 }
@@ -495,9 +392,7 @@ async function createWorkspace() {
     const payload = await response.json();
     renderWorkspaces(
       payload.workspaces || [],
-      payload.current_workspace_id || null,
-      payload.users || [],
-      payload.current_user_id || ""
+      payload.current_workspace_id || null
     );
     setWorkspaceStatus("Workspace created.");
   } catch (error) {

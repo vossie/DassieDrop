@@ -1043,10 +1043,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(workspace["access_mode"], "explicit")
         self.assertEqual(workspace["owner_user_id"], creator_id)
         self.assertEqual(workspace["explicit_user_ids"], [])
-        self.assertEqual(
-            sorted(payload["users"][0].keys()),
-            ["id", "role", "username"],
-        )
+        self.assertNotIn("users", payload)
 
         blocked_cookie = self.user_cookie("blocked", "blocked-pass")
         blocked_id = next(user["id"] for user in storage.list_users() if user["username"] == "blocked")
@@ -1100,6 +1097,80 @@ class HttpServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(delete_response["status"], 403)
+
+    def test_explicit_workspace_access_page_manages_selected_users(self) -> None:
+        self.start_server()
+        creator_cookie = self.user_cookie("creator", "creator-pass")
+        creator = next(user for user in storage.list_users() if user["username"] == "creator")
+        allowed = storage.set_user("Allowed", password="allowed-pass", api_key="allowed-api", role="user")
+        blocked = storage.set_user("Blocked", password="blocked-pass", api_key="blocked-api", role="user")
+        admin = storage.set_user("Admin", password="admin-pass", api_key="admin-api", role="admin")
+        workspace = app.create_workspace(
+            "Team Room",
+            owner_user_id=creator["id"],
+            access_mode="explicit",
+            explicit_user_ids=[allowed["id"]],
+        )
+        enter = self.select_workspace(creator_cookie, workspace["id"])
+        self.assertEqual(enter["status"], 200)
+
+        page = self.request("GET", "/", headers={"Cookie": creator_cookie})
+        self.assertEqual(page["status"], 200)
+        self.assertIn('href="/workspaces/access"', page["text"])
+
+        access_page = self.request("GET", "/workspaces/access", headers={"Cookie": creator_cookie})
+        self.assertEqual(access_page["status"], 200)
+        self.assertIn('id="hasAccessUsers"', access_page["text"])
+        token = access_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        access_payload_response = self.request(
+            "GET",
+            "/api/workspaces/access",
+            headers={"Cookie": creator_cookie},
+        )
+        self.assertEqual(access_payload_response["status"], 200)
+        access_payload = json.loads(access_payload_response["body"])
+        self.assertEqual(access_payload["workspace"]["id"], workspace["id"])
+        self.assertIn(allowed["id"], access_payload["workspace"]["explicit_user_ids"])
+        self.assertIn(blocked["id"], {user["id"] for user in access_payload["users"]})
+        self.assertIn(admin["id"], {user["id"] for user in access_payload["users"]})
+
+        update_response = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/users",
+            body=json.dumps({"user_ids": [blocked["id"]]}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": creator_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(update_response["status"], 200)
+        updated = json.loads(update_response["body"])["workspace"]
+        self.assertEqual(updated["explicit_user_ids"], [blocked["id"]])
+
+    def test_workspace_access_page_requires_explicit_workspace_manager(self) -> None:
+        self.start_server()
+        owner_cookie = self.user_cookie("owner", "owner-pass")
+        outsider_cookie = self.user_cookie("outsider", "outsider-pass")
+        owner = next(user for user in storage.list_users() if user["username"] == "owner")
+        outsider = next(user for user in storage.list_users() if user["username"] == "outsider")
+        explicit_workspace = app.create_workspace(
+            "Team Room",
+            owner_user_id=owner["id"],
+            access_mode="explicit",
+            explicit_user_ids=[outsider["id"]],
+        )
+        public_workspace = app.create_workspace("Public Room", owner_user_id=owner["id"])
+
+        self.assertEqual(self.select_workspace(outsider_cookie, explicit_workspace["id"])["status"], 200)
+        forbidden = self.request("GET", "/workspaces/access", headers={"Cookie": outsider_cookie})
+        self.assertEqual(forbidden["status"], 403)
+
+        self.assertEqual(self.select_workspace(owner_cookie, public_workspace["id"])["status"], 200)
+        redirected = self.request("GET", "/workspaces/access", headers={"Cookie": owner_cookie})
+        self.assertEqual(redirected["status"], 303)
+        self.assertEqual(redirected["headers"]["Location"], "/")
 
     def test_workspace_creation_endpoint_accepts_custom_expiry(self) -> None:
         self.start_server()
@@ -2917,7 +2988,13 @@ class ScriptTests(unittest.TestCase):
         template = (REPO_ROOT / "templates" / "workspaces.html").read_text(
             encoding="utf-8"
         )
+        access_template = (REPO_ROOT / "templates" / "workspace_access.html").read_text(
+            encoding="utf-8"
+        )
         script = (REPO_ROOT / "assets" / "workspaces.js").read_text(
+            encoding="utf-8"
+        )
+        access_script = (REPO_ROOT / "assets" / "workspace-access.js").read_text(
             encoding="utf-8"
         )
         index = (REPO_ROOT / "templates" / "index.html").read_text(
@@ -2934,9 +3011,17 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('id="workspaceMessageExpiry"', template)
         self.assertIn('value="explicit"', template)
         self.assertIn('fetch("/api/workspaces")', script)
-        self.assertIn("saveExplicitWorkspaceUsers", script)
+        self.assertNotIn("saveExplicitWorkspaceUsers", script)
+        self.assertNotIn("workspace-explicit-editor", script)
         self.assertIn("syncMessageExpiryOptions", script)
         self.assertIn("message_expiry_seconds: messageExpirySeconds", script)
+        self.assertIn("__MANAGE_ACCESS_LINK__", index)
+        self.assertIn(".tabs-access-link", (REPO_ROOT / "assets" / "app.css").read_text(encoding="utf-8"))
+        self.assertIn('id="hasAccessUsers"', access_template)
+        self.assertIn('id="noAccessUsers"', access_template)
+        self.assertIn('fetch("/api/workspaces/access")', access_script)
+        self.assertIn("moveSelected", access_script)
+        self.assertIn("Save Access", access_template)
         self.assertIn('href="/workspaces"', index)
         self.assertIn('class="hero-brand-link"', index)
         self.assertIn('/assets/DassieDrop-dassie-icon.png', index)
