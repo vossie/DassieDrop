@@ -43,7 +43,10 @@
       </div>
       <div class="settings-form">
         <label class="settings-field" for="settingsAccessCode">
-          <span>App access code</span>
+          <span class="settings-label-row">
+            <span>App access code</span>
+            <span class="settings-help" tabindex="0" aria-label="App access code help" data-tooltip="Controls browser login for the DassieDrop web app. Users must enter this code before opening protected app pages.">?</span>
+          </span>
           <input id="settingsAccessCode" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New access code">
         </label>
         <label class="checkbox-row settings-clear-row" for="clearAccessCode">
@@ -52,7 +55,10 @@
         </label>
 
         <label class="settings-field" for="settingsApiKey">
-          <span>API key</span>
+          <span class="settings-label-row">
+            <span>API key</span>
+            <span class="settings-help" tabindex="0" aria-label="API key help" data-tooltip="Authenticates automation clients and scripts that call protected API routes with the X-API-Key header.">?</span>
+          </span>
           <input id="settingsApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New API key">
         </label>
         <label class="checkbox-row settings-clear-row" for="clearApiKey">
@@ -61,7 +67,10 @@
         </label>
 
         <label class="settings-field" for="settingsSuperPassword">
-          <span>Workspace super password</span>
+          <span class="settings-label-row">
+            <span>Workspace super password</span>
+            <span class="settings-help" tabindex="0" aria-label="Workspace super password help" data-tooltip="Lets an admin enter or delete any protected workspace without knowing that workspace's own password.">?</span>
+          </span>
           <input id="settingsSuperPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New super password">
         </label>
         <label class="checkbox-row settings-clear-row" for="clearSuperPassword">

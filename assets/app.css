@@ -984,6 +984,56 @@ input[type="file"] {
   color: var(--muted);
   font-size: 0.95rem;
 }
+.settings-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+}
+.settings-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--accent);
+  cursor: help;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.settings-help::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  width: min(280px, 78vw);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #061a3a;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.settings-help:hover::after,
+.settings-help:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.settings-help:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
 .settings-input {
   width: min(100%, 420px);
 }
