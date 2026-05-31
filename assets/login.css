@@ -45,8 +45,13 @@ p {
   color: var(--muted);
   line-height: 1.5;
 }
+.login-form {
+  display: grid;
+  gap: 12px;
+}
 input {
   width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
@@ -58,6 +63,21 @@ input:focus {
   outline: 2px solid rgba(11, 46, 99, 0.18);
   outline-offset: 2px;
   border-color: var(--accent-strong);
+}
+.remember-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.remember-row input {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0;
 }
 .password-field-wrap {
   position: relative;
@@ -138,6 +158,9 @@ button {
   background: var(--accent);
   color: #fff;
   box-shadow: 0 10px 24px rgba(6, 26, 58, 0.16);
+}
+.login-form > button {
+  margin-top: 2px;
 }
 .error {
   min-height: 1.2rem;

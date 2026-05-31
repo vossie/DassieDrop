@@ -12,14 +12,20 @@
   <img class="login-brand" src="/assets/dassiedrop_horizontal_tight.png" alt="DassieDrop">
   <h1>Sign In</h1>
   <p>Enter your DassieDrop username and password.</p>
-  <input id="loginUsername" type="text" placeholder="Username" autocomplete="username" autofocus>
-  <div class="password-field-wrap">
-    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
-    <button class="password-toggle-btn" type="button" data-password-toggle="loginPassword">
-      <span class="password-eye-icon" aria-hidden="true"></span>
-    </button>
+  <div class="login-form">
+    <input id="loginUsername" type="text" placeholder="Username" autocomplete="username" autofocus>
+    <div class="password-field-wrap">
+      <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+      <button class="password-toggle-btn" type="button" data-password-toggle="loginPassword">
+        <span class="password-eye-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+    <label class="remember-row" for="rememberUsername">
+      <input id="rememberUsername" type="checkbox">
+      <span>Remember username</span>
+    </label>
+    <button id="loginBtn" type="button">Sign In</button>
   </div>
-  <button id="loginBtn" type="button">Sign In</button>
   <div class="error" id="loginStatus"></div>
 </main>
 <script src="/assets/password-toggle.js"></script>

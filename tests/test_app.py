@@ -2853,6 +2853,27 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('window.addEventListener("pageshow"', (REPO_ROOT / "assets" / "app.js").read_text(encoding="utf-8"))
         self.assertLess(template.index("<h2>Create Workspace</h2>"), template.index("<h2>Workspaces</h2>"))
 
+    def test_login_form_uses_stacked_full_width_controls(self) -> None:
+        template = (REPO_ROOT / "templates" / "login.html").read_text(
+            encoding="utf-8"
+        )
+        stylesheet = (REPO_ROOT / "assets" / "login.css").read_text(
+            encoding="utf-8"
+        )
+        script = (REPO_ROOT / "assets" / "login.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('class="login-form"', template)
+        self.assertIn('id="rememberUsername"', template)
+        self.assertLess(template.index('id="loginUsername"'), template.index('id="loginPassword"'))
+        self.assertIn(".login-form {\n  display: grid;\n  gap: 12px;\n}", stylesheet)
+        self.assertIn(".remember-row {", stylesheet)
+        self.assertIn("input {\n  width: 100%;\n  min-width: 0;", stylesheet)
+        self.assertIn('const rememberedUsernameKey = "dassiedrop.rememberedUsername"', script)
+        self.assertIn("window.localStorage.setItem(rememberedUsernameKey, username)", script)
+        self.assertNotIn("localStorage.setItem(rememberedUsernameKey, loginPassword", script)
+
     def test_text_panel_exposes_paste_and_send_control(self) -> None:
         index = (REPO_ROOT / "templates" / "index.html").read_text(
             encoding="utf-8"
