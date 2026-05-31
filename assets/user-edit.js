@@ -9,6 +9,7 @@ const editUserRoleField = document.getElementById("editUserRoleField");
 const setupTotpBtn = document.getElementById("setupTotpBtn");
 const disableTotpBtn = document.getElementById("disableTotpBtn");
 const totpSetupPanel = document.getElementById("totpSetupPanel");
+const totpQrCode = document.getElementById("totpQrCode");
 const totpSecret = document.getElementById("totpSecret");
 const totpUri = document.getElementById("totpUri");
 const totpCode = document.getElementById("totpCode");
@@ -76,6 +77,7 @@ async function setupTotp() {
       throw new Error(`Authenticator setup failed: ${response.status}`);
     }
     const payload = await response.json();
+    totpQrCode.innerHTML = payload.qr_svg || "";
     totpSecret.value = payload.secret || "";
     totpUri.value = payload.otpauth_uri || "";
     totpCode.value = "";

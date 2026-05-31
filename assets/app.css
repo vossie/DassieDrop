@@ -1279,6 +1279,18 @@ input[type="file"] {
 .totp-setup-panel[hidden] {
   display: none;
 }
+.totp-qr-code {
+  width: fit-content;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.totp-qr-code svg {
+  display: block;
+  width: 180px;
+  height: 180px;
+}
 .totp-setup-panel input[readonly] {
   background: #f8fafc;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;

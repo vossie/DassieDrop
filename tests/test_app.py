@@ -602,6 +602,8 @@ class AppStateTests(unittest.TestCase):
         setup = storage.begin_user_totp_setup(user["id"])
         self.assertIn("secret", setup)
         self.assertIn("otpauth://totp/DassieDrop%3AAlice", setup["otpauth_uri"])
+        self.assertIn("<svg", setup["qr_svg"])
+        self.assertIn('aria-label="Authenticator QR code"', setup["qr_svg"])
         code = storage.totp_code(setup["secret"], self.fake_now())
         confirmed = storage.confirm_user_totp_setup(user["id"], code)
 
@@ -1602,6 +1604,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(setup_response["status"], 200)
         setup_payload = json.loads(setup_response["body"])
         self.assertIn("otpauth_uri", setup_payload)
+        self.assertIn("<svg", setup_payload["qr_svg"])
 
         confirm_response = self.request(
             "POST",
@@ -3688,9 +3691,12 @@ class ScriptTests(unittest.TestCase):
 
         self.assertIn("Authenticator app", template)
         self.assertIn('id="setupTotpBtn"', template)
+        self.assertIn('id="totpQrCode"', template)
         self.assertIn('id="totpSecret"', template)
+        self.assertIn("totpQrCode.innerHTML", script)
         self.assertIn("/totp/setup", script)
         self.assertIn("/totp/confirm", script)
+        self.assertIn(".totp-qr-code", stylesheet)
         self.assertIn(".totp-setup-panel", stylesheet)
 
     def test_text_panel_exposes_paste_and_send_control(self) -> None:

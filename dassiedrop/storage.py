@@ -14,6 +14,7 @@ import urllib.parse
 from pathlib import Path
 
 from . import config, state
+from .qr import qr_svg
 
 
 def ensure_upload_dir() -> None:
@@ -880,6 +881,7 @@ def begin_user_totp_setup(user_id: str) -> dict:
         return {
             "secret": secret,
             "otpauth_uri": totp_uri(user["username"], secret),
+            "qr_svg": qr_svg(totp_uri(user["username"], secret)),
             "period": TOTP_PERIOD_SECONDS,
             "digits": TOTP_DIGITS,
         }
