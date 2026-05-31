@@ -13,6 +13,7 @@
 - Added password-protected workspace access management so owners, admins, and root users can change the workspace password.
 - Prevented duplicate workspace names after normalisation and duplicate usernames after normalisation.
 - Added login request rate limiting on top of wrong-password lockout to reduce brute-force and request-flood pressure on the login endpoint.
+- Restricted workspace password override to the logged-in admin/root user's own password; normal users can no longer unlock a workspace with someone else's privileged password.
 - Updated the footer, workspace selector layout, mobile access controls, and password visibility controls.
 - Split the HTTP route handler into focused route mixins to make routing, pages, management actions, uploads, static serving, and WebSockets easier to maintain.
 

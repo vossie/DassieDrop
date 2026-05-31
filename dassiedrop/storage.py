@@ -467,6 +467,31 @@ def workspace_password_is_valid(workspace: dict, password: str) -> bool:
     return verify_password(password, workspace.get("password_hash"))
 
 
+def privileged_user_password_is_valid_for_user(user_id: str | None, password: str) -> bool:
+    clean_user_id = str(user_id or "").strip()
+    candidate = password.strip()
+    if not clean_user_id or not candidate:
+        return False
+    with state.state_lock:
+        user = get_users_locked().get(clean_user_id)
+        if user is None or normalize_user_role(user.get("role")) not in {"root", "admin"}:
+            return False
+        return secret_matches_hash(candidate, user.get("password_hash"))
+
+
+def workspace_password_or_user_override_is_valid(
+    workspace: dict,
+    password: str,
+    user_id: str | None = None,
+) -> bool:
+    candidate = password.strip()
+    if not candidate:
+        return False
+    if workspace_password_is_valid(workspace, candidate):
+        return True
+    return privileged_user_password_is_valid_for_user(user_id, candidate)
+
+
 def workspace_access_mode(workspace: dict) -> str:
     return normalize_workspace_access_mode(workspace.get("access_mode"), workspace.get("password_hash"))
 
@@ -491,19 +516,18 @@ def workspace_user_can_access(workspace: dict, user_id: str | None) -> bool:
         return clean_user_id in normalize_workspace_user_ids(locked_workspace.get("explicit_user_ids"))
 
 
-def workspace_delete_password_is_valid(workspace: dict, password: str) -> bool:
+def workspace_delete_password_is_valid(
+    workspace: dict,
+    password: str,
+    user_id: str | None = None,
+) -> bool:
     if workspace.get("password_hash") is None:
         return True
-    candidate = password.strip()
-    if not candidate:
-        return False
-    if privileged_user_password_is_valid(candidate):
-        return True
-    return workspace_password_is_valid(workspace, candidate)
+    return workspace_password_or_user_override_is_valid(workspace, password, user_id=user_id)
 
 
-def workspace_delete_uses_super_password(password: str) -> bool:
-    return privileged_user_password_is_valid(password)
+def workspace_delete_uses_super_password(password: str, user_id: str | None = None) -> bool:
+    return privileged_user_password_is_valid_for_user(user_id, password)
 
 
 def serialize_workspace_summary(workspace: dict) -> dict:
@@ -739,19 +763,6 @@ def api_key_user(api_key: str) -> dict | None:
             if secret_matches_hash(candidate, user.get("api_key_hash")):
                 return serialize_user(user)
     return None
-
-
-def privileged_user_password_is_valid(password: str) -> bool:
-    candidate = password.strip()
-    if not candidate:
-        return False
-    with state.state_lock:
-        for user in get_users_locked().values():
-            if normalize_user_role(user.get("role")) not in {"root", "admin"}:
-                continue
-            if secret_matches_hash(candidate, user.get("password_hash")):
-                return True
-    return False
 
 
 def set_user(
@@ -1376,7 +1387,11 @@ def enter_workspace(
         return (False, "Workspace not found")
     if not workspace_user_can_access(workspace, user_id):
         return (False, "Workspace access denied")
-    if workspace.get("password_hash") and not workspace_delete_password_is_valid(workspace, password):
+    if workspace.get("password_hash") and not workspace_delete_password_is_valid(
+        workspace,
+        password,
+        user_id=user_id,
+    ):
         return (False, "Wrong workspace password")
 
     with state.state_lock:
@@ -1389,11 +1404,15 @@ def enter_workspace(
     return (True, "")
 
 
-def delete_workspace(workspace_id: str, password: str = "") -> tuple[bool, str]:
+def delete_workspace(
+    workspace_id: str,
+    password: str = "",
+    user_id: str | None = None,
+) -> tuple[bool, str]:
     workspace = get_workspace(workspace_id)
     if workspace is None:
         return (False, "Workspace not found")
-    if not workspace_delete_password_is_valid(workspace, password):
+    if not workspace_delete_password_is_valid(workspace, password, user_id=user_id):
         return (False, "Wrong workspace password")
 
     removed_workspace = None

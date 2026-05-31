@@ -478,8 +478,12 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(message, "")
 
-        storage.set_user("Admin", password="override", api_key="override-api", role="admin")
-        deleted, delete_message = app.delete_workspace(workspace["id"], password="override")
+        admin = storage.set_user("Admin", password="override", api_key="override-api", role="admin")
+        deleted, delete_message = app.delete_workspace(
+            workspace["id"],
+            password="override",
+            user_id=admin["id"],
+        )
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
@@ -487,9 +491,14 @@ class AppStateTests(unittest.TestCase):
     def test_can_enter_workspace_with_admin_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
-        storage.set_user("Admin", password="override", api_key="override-api", role="admin")
+        admin = storage.set_user("Admin", password="override", api_key="override-api", role="admin")
 
-        ok, message = app.enter_workspace(session_id, workspace["id"], password="override")
+        ok, message = app.enter_workspace(
+            session_id,
+            workspace["id"],
+            password="override",
+            user_id=admin["id"],
+        )
 
         self.assertTrue(ok)
         self.assertEqual(message, "")
@@ -497,22 +506,62 @@ class AppStateTests(unittest.TestCase):
     def test_can_enter_workspace_with_root_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
-        storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
+        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
 
-        ok, message = app.enter_workspace(session_id, workspace["id"], password="stored-override")
+        ok, message = app.enter_workspace(
+            session_id,
+            workspace["id"],
+            password="stored-override",
+            user_id=root["id"],
+        )
 
         self.assertTrue(ok)
         self.assertEqual(message, "")
 
     def test_can_delete_workspace_with_root_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
-        storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
+        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
 
-        deleted, delete_message = app.delete_workspace(workspace["id"], password="stored-override")
+        deleted, delete_message = app.delete_workspace(
+            workspace["id"],
+            password="stored-override",
+            user_id=root["id"],
+        )
 
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+    def test_privileged_workspace_override_requires_matching_user(self) -> None:
+        workspace = app.create_workspace("Secure", password="vault")
+        session_id = app.create_authorized_session()
+        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
+        user = storage.set_user("Alice", password="alice-pass", api_key="alice-api", role="user")
+
+        ok, message = app.enter_workspace(
+            session_id,
+            workspace["id"],
+            password="stored-override",
+            user_id=user["id"],
+        )
+        self.assertFalse(ok)
+        self.assertEqual(message, "Wrong workspace password")
+
+        deleted, delete_message = app.delete_workspace(
+            workspace["id"],
+            password="stored-override",
+            user_id=user["id"],
+        )
+        self.assertFalse(deleted)
+        self.assertEqual(delete_message, "Wrong workspace password")
+
+        deleted, delete_message = app.delete_workspace(
+            workspace["id"],
+            password="stored-override",
+            user_id=root["id"],
+        )
+        self.assertTrue(deleted)
+        self.assertEqual(delete_message, "")
 
     def test_default_workspace_can_be_deleted_and_is_not_recreated_by_listing(self) -> None:
         self.assertIn(app.DEFAULT_WORKSPACE_ID, {item["id"] for item in app.list_workspaces()})
@@ -2543,6 +2592,79 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(allowed_preview["status"], 200)
         self.assertEqual(allowed_preview["body"], b"secret")
+
+    def test_workspace_password_override_requires_logged_in_privileged_user(self) -> None:
+        self.start_server()
+        root = storage.set_user("Root", password="root-pass", api_key="root-api", role="root")
+        user_cookie = self.user_cookie("alice", "alice-pass")
+        workspace = app.create_workspace("Secure Space", password="vault")
+        token = self.csrf_token(user_cookie)
+
+        blocked_enter = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/enter",
+            body=json.dumps({"password": "root-pass"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": user_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_enter["status"], 403)
+        self.assertIn("Wrong workspace password", blocked_enter["text"])
+
+        root_login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "Root", "password": "root-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(root_login["status"], 200)
+        root_cookie = root_login["headers"]["Set-Cookie"].split(";", 1)[0]
+        root_token = self.csrf_token(root_cookie)
+        allowed_enter = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/enter",
+            body=json.dumps({"password": "root-pass"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": root_cookie,
+                "X-CSRF-Token": root_token,
+            },
+        )
+        self.assertEqual(allowed_enter["status"], 200)
+        self.assertEqual(root["role"], "root")
+
+    def test_direct_file_workspace_override_requires_matching_privileged_user(self) -> None:
+        self.start_server()
+        workspace = app.create_workspace("Secure Space", password="vault")
+        upload_response = self.upload_request(
+            "locked.txt",
+            b"secret",
+            workspace_slug=workspace["slug"],
+            workspace_password="vault",
+        )
+        self.assertEqual(upload_response["status"], 200)
+        file_entry = json.loads(upload_response["body"])["files"][0]
+        storage.set_user("Root", password="root-pass", api_key="root-api", role="root")
+        user_cookie = self.user_cookie("alice", "alice-pass")
+
+        blocked_download = self.request(
+            "GET",
+            f"/download/{file_entry['id']}",
+            headers={"Cookie": user_cookie, "X-Workspace-Password": "root-pass"},
+        )
+        self.assertEqual(blocked_download["status"], 403)
+        self.assertIn("Wrong workspace password", blocked_download["text"])
+
+        admin_cookie = self.root_cookie("Admin", "admin-pass")
+        allowed_download = self.request(
+            "GET",
+            f"/download/{file_entry['id']}",
+            headers={"Cookie": admin_cookie, "X-Workspace-Password": "admin-pass"},
+        )
+        self.assertEqual(allowed_download["status"], 200)
+        self.assertEqual(allowed_download["body"], b"secret")
 
     def test_hidden_file_share_in_protected_workspace_requires_workspace_and_entry_passwords(self) -> None:
         self.start_server()

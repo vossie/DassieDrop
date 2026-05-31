@@ -425,14 +425,15 @@ class ManagementRoutesMixin:
         ):
             self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
             return
-        ok, message = storage.delete_workspace(workspace_id, password=password)
+        current_user_id = self.current_user_id()
+        ok, message = storage.delete_workspace(workspace_id, password=password, user_id=current_user_id)
         if not ok:
             status = HTTPStatus.NOT_FOUND if message == "Workspace not found" else HTTPStatus.FORBIDDEN
             if status == HTTPStatus.FORBIDDEN:
                 auth.record_throttle_failure(self, "workspace-delete", workspace_id)
             self.send_error(status, message)
             return
-        if workspace is not None and storage.workspace_delete_uses_super_password(password):
+        if workspace is not None and storage.workspace_delete_uses_super_password(password, current_user_id):
             logger.warning(
                 "Workspace deleted with privileged user password: workspace_id=%s workspace_name=%s client_ip=%s",
                 workspace_id,
@@ -456,8 +457,10 @@ class ManagementRoutesMixin:
             if not allowed:
                 self.send_throttled("Too many workspace password attempts", retry_after)
                 return None
-            if workspace.get("password_hash") and not storage.workspace_password_is_valid(
-                workspace, auth.requested_workspace_password(self)
+            if workspace.get("password_hash") and not storage.workspace_password_or_user_override_is_valid(
+                workspace,
+                auth.requested_workspace_password(self),
+                user_id=self.current_user_id(),
             ):
                 auth.record_throttle_failure(self, "workspace-context", workspace["id"])
                 self.send_error(HTTPStatus.FORBIDDEN, "Wrong workspace password")

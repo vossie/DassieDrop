@@ -209,8 +209,10 @@ class PageRoutesMixin:
             if not allowed:
                 self.send_throttled("Too many password attempts", retry_after)
                 return
-            if current_workspace_id != workspace["id"] and not storage.workspace_password_is_valid(
-                workspace, password
+            if current_workspace_id != workspace["id"] and not storage.workspace_password_or_user_override_is_valid(
+                workspace,
+                password,
+                user_id=self.current_user_id(),
             ):
                 auth.record_throttle_failure(self, "workspace-shortcut", workspace["id"])
                 self.redirect(
