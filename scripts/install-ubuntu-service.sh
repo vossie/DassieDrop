@@ -122,6 +122,13 @@ resolve_update_check_enabled() {
 
 load_existing_config
 
+ACTION="install"
+if systemctl list-unit-files 2>/dev/null | grep -q "^${SERVICE_NAME}\\.service"; then
+  ACTION="upgrade"
+elif [[ -f "${ENV_FILE}" ]]; then
+  ACTION="upgrade"
+fi
+
 HOST_VALUE="${HOST:-0.0.0.0}"
 HTTP_PORT_VALUE="${HTTP_PORT:-${PORT:-8000}}"
 HTTPS_VALUE="${HTTPS:-1}"
@@ -214,6 +221,11 @@ if [[ -d "${REPO_DIR}/templates" ]]; then
   install -d -m 0755 "${APP_DIR}/templates"
   cp -R "${REPO_DIR}/templates/." "${APP_DIR}/templates/"
 fi
+if [[ -d "${REPO_DIR}/scripts" ]]; then
+  rm -rf "${APP_DIR}/scripts"
+  install -d -m 0755 "${APP_DIR}/scripts"
+  cp -R "${REPO_DIR}/scripts/." "${APP_DIR}/scripts/"
+fi
 
 chown root:root "${APP_DIR}/app.py"
 if [[ -f "${APP_DIR}/README.md" ]]; then
@@ -230,6 +242,9 @@ if [[ -d "${APP_DIR}/assets" ]]; then
 fi
 if [[ -d "${APP_DIR}/templates" ]]; then
   chown -R root:root "${APP_DIR}/templates"
+fi
+if [[ -d "${APP_DIR}/scripts" ]]; then
+  chown -R root:root "${APP_DIR}/scripts"
 fi
 
 cat > "${ENV_FILE}" <<EOF
@@ -249,6 +264,17 @@ UPDATE_CHECK_ENABLED=${UPDATE_CHECK_ENABLED_VALUE}
 EOF
 chmod 0640 "${ENV_FILE}"
 chown root:"${SERVICE_GROUP}" "${ENV_FILE}"
+
+if [[ "${ACTION}" == "install" ]]; then
+  runuser -u "${SERVICE_USER}" -- env \
+    PYTHONPATH="${APP_DIR}" \
+    UPLOAD_DIR="${DATA_DIR}/uploads" \
+    "${PYTHON_BIN}" "${APP_DIR}/scripts/reset_admin_password.py" \
+      --username admin \
+      --role super-admin \
+      --create \
+      password
+fi
 
 cat > "${SYSTEMD_UNIT}" <<EOF
 [Unit]

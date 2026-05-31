@@ -254,6 +254,11 @@ if [[ -d "${SOURCE_DIR}/templates" ]]; then
   install -d -m 0755 "${APP_DIR}/templates"
   cp -R "${SOURCE_DIR}/templates/." "${APP_DIR}/templates/"
 fi
+if [[ -d "${SOURCE_DIR}/scripts" ]]; then
+  rm -rf "${APP_DIR}/scripts"
+  install -d -m 0755 "${APP_DIR}/scripts"
+  cp -R "${SOURCE_DIR}/scripts/." "${APP_DIR}/scripts/"
+fi
 
 chown root:root "${APP_DIR}/app.py"
 if [[ -f "${APP_DIR}/README.md" ]]; then
@@ -270,6 +275,9 @@ if [[ -d "${APP_DIR}/assets" ]]; then
 fi
 if [[ -d "${APP_DIR}/templates" ]]; then
   chown -R root:root "${APP_DIR}/templates"
+fi
+if [[ -d "${APP_DIR}/scripts" ]]; then
+  chown -R root:root "${APP_DIR}/scripts"
 fi
 
 cat > "${ENV_FILE}" <<EOF
@@ -289,6 +297,17 @@ UPDATE_CHECK_ENABLED=${UPDATE_CHECK_ENABLED_VALUE}
 EOF
 chmod 0640 "${ENV_FILE}"
 chown root:"${SERVICE_GROUP}" "${ENV_FILE}"
+
+if [[ "${ACTION}" == "install" ]]; then
+  runuser -u "${SERVICE_USER}" -- env \
+    PYTHONPATH="${APP_DIR}" \
+    UPLOAD_DIR="${DATA_DIR}/uploads" \
+    "${PYTHON_BIN}" "${APP_DIR}/scripts/reset_admin_password.py" \
+      --username admin \
+      --role super-admin \
+      --create \
+      password
+fi
 
 cat > "${SYSTEMD_UNIT}" <<EOF
 [Unit]

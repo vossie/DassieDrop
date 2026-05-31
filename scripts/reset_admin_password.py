@@ -23,6 +23,11 @@ def main() -> int:
         default=None,
         help="Optional role to set: super-admin, admin, or user. Legacy root is accepted as super-admin.",
     )
+    parser.add_argument(
+        "--create",
+        action="store_true",
+        help="Create the user if it does not exist.",
+    )
     args = parser.parse_args()
 
     username_key = args.username.strip().lower()
@@ -40,8 +45,18 @@ def main() -> int:
         None,
     )
     if user is None:
-        print(f"user not found: {args.username}", file=sys.stderr)
-        return 1
+        if not args.create:
+            print(f"user not found: {args.username}", file=sys.stderr)
+            return 1
+        user = storage.set_user(
+            args.username.strip(),
+            password=args.password,
+            api_key=args.password,
+            role=args.role or "super-admin",
+        )
+        suffix = f"; migrated {migrated_roles} legacy root role(s)" if migrated_roles else ""
+        print(f"{user['username']} user created; role {user['role']}; authenticator disabled{suffix}")
+        return 0
 
     if args.role is not None:
         user = storage.update_user(

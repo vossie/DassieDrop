@@ -3734,6 +3734,12 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('done < "${ENV_FILE}"', script)
         self.assertIn('SOURCE_DIR}/dassiedrop', script)
         self.assertIn('APP_DIR}/dassiedrop', script)
+        self.assertIn('SOURCE_DIR}/scripts', script)
+        self.assertIn('APP_DIR}/scripts', script)
+        self.assertIn('if [[ "${ACTION}" == "install" ]]; then', script)
+        self.assertIn('runuser -u "${SERVICE_USER}" -- env', script)
+        self.assertIn('"${PYTHON_BIN}" "${APP_DIR}/scripts/reset_admin_password.py"', script)
+        self.assertIn("--create", script)
         self.assertIn('ExecStart=${PYTHON_BIN} ${APP_DIR}/app.py', script)
         self.assertIn('systemctl restart "${SERVICE_NAME}.service"', script)
 
@@ -3761,6 +3767,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('APP_DIR}/assets', script)
         self.assertIn('REPO_DIR}/templates', script)
         self.assertIn('APP_DIR}/templates', script)
+        self.assertIn('REPO_DIR}/scripts', script)
+        self.assertIn('APP_DIR}/scripts', script)
         self.assertIn('apt-get install -y python3.11', script)
         self.assertIn('apt-get install -y openssl', script)
         self.assertNotIn("ACCESS_CODE", script)
@@ -3773,6 +3781,10 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('HTTPS_PORT=${HTTPS_PORT_VALUE}', script)
         self.assertIn('HTTPS_CERT_FILE=${HTTPS_CERT_FILE_VALUE}', script)
         self.assertIn('install -d -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" -m 0750 "${CERT_DIR}"', script)
+        self.assertIn('if [[ "${ACTION}" == "install" ]]; then', script)
+        self.assertIn('runuser -u "${SERVICE_USER}" -- env', script)
+        self.assertIn('"${PYTHON_BIN}" "${APP_DIR}/scripts/reset_admin_password.py"', script)
+        self.assertIn("--create", script)
         self.assertIn('ExecStart=${PYTHON_BIN} ${APP_DIR}/app.py', script)
         self.assertIn('systemctl restart "${SERVICE_NAME}.service"', script)
 
@@ -3934,6 +3946,70 @@ class ScriptTests(unittest.TestCase):
                         "users=storage.list_users();"
                         "assert users[0]['role'] == 'super-admin', users;"
                         "assert storage.authenticate_user('admin', 'new-pass') is not None"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(verify.returncode, 0, verify.stderr)
+
+    def test_reset_admin_password_script_can_create_missing_admin(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            upload_dir = Path(temp_dir) / "uploads"
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(REPO_ROOT),
+                "UPLOAD_DIR": str(upload_dir),
+            }
+            setup = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from dassiedrop import storage;"
+                        "storage.ensure_upload_dir();"
+                        "storage.set_user('carel', password='old-pass', api_key='api', role='super-admin')"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(setup.returncode, 0, setup.stderr)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/reset_admin_password.py",
+                    "--username",
+                    "admin",
+                    "--role",
+                    "super-admin",
+                    "--create",
+                    "password",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("admin user created; role super-admin", result.stdout)
+
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from dassiedrop import storage;"
+                        "storage.load_persisted_files();"
+                        "assert storage.authenticate_user('admin', 'password') is not None"
                     ),
                 ],
                 cwd=REPO_ROOT,
