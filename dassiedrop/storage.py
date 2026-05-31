@@ -537,11 +537,6 @@ def workspace_access_mode(workspace: dict) -> str:
     return normalize_workspace_access_mode(workspace.get("access_mode"), workspace.get("password_hash"))
 
 
-def user_is_privileged_locked(user_id: str) -> bool:
-    user = get_users_locked().get(str(user_id or "").strip())
-    return user is not None and normalize_user_role(user.get("role")) in {"super-admin", "admin"}
-
-
 def workspace_user_can_access(workspace: dict, user_id: str | None) -> bool:
     if workspace_access_mode(workspace) != "explicit":
         return True
@@ -550,8 +545,6 @@ def workspace_user_can_access(workspace: dict, user_id: str | None) -> bool:
         return False
     with state.state_lock:
         locked_workspace = get_workspace_locked(workspace["id"]) or workspace
-        if user_is_privileged_locked(clean_user_id):
-            return True
         if str(locked_workspace.get("owner_user_id") or "").strip() == clean_user_id:
             return True
         return clean_user_id in normalize_workspace_user_ids(locked_workspace.get("explicit_user_ids"))
@@ -570,11 +563,10 @@ def initial_session_workspace_id(user_id: str | None) -> str | None:
             clean_user_id = str(user_id or "").strip()
             if not clean_user_id:
                 return None
-            if not user_is_privileged_locked(clean_user_id):
-                owner_user_id = str(workspace.get("owner_user_id") or "").strip()
-                explicit_user_ids = normalize_workspace_user_ids(workspace.get("explicit_user_ids"))
-                if owner_user_id != clean_user_id and clean_user_id not in explicit_user_ids:
-                    return None
+            owner_user_id = str(workspace.get("owner_user_id") or "").strip()
+            explicit_user_ids = normalize_workspace_user_ids(workspace.get("explicit_user_ids"))
+            if owner_user_id != clean_user_id and clean_user_id not in explicit_user_ids:
+                return None
         return workspace["id"]
 
 

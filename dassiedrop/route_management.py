@@ -22,6 +22,10 @@ class ManagementRoutesMixin:
             workspace
             for workspace in storage.list_workspaces()
             if storage.workspace_user_can_access(workspace, self.current_user_id())
+            or (
+                storage.workspace_access_mode(workspace) in {"password", "explicit"}
+                and self.user_can_manage_workspace(workspace)
+            )
         ]
         return {
             "workspaces": [

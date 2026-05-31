@@ -255,7 +255,7 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(created["password_required"])
         self.assertEqual(created["expiry_seconds"], app.EXPIRY_SECONDS)
 
-    def test_explicit_workspace_access_allows_owner_privileged_and_selected_users(self) -> None:
+    def test_explicit_workspace_access_allows_owner_and_selected_users_only(self) -> None:
         owner = storage.set_user("Owner", password="owner-pass", api_key="owner-api", role="user")
         allowed_user = storage.set_user("Allowed", password="allowed-pass", api_key="allowed-api", role="user")
         blocked_user = storage.set_user("Blocked", password="blocked-pass", api_key="blocked-api", role="user")
@@ -286,6 +286,12 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(message, "")
 
+        admin_session = app.create_authorized_session()
+        ok, message = app.enter_workspace(admin_session, workspace["id"], user_id=admin["id"])
+        self.assertFalse(ok)
+        self.assertEqual(message, "Workspace access denied")
+
+        storage.set_workspace_explicit_users(workspace["id"], [allowed_user["id"], admin["id"]])
         admin_session = app.create_authorized_session()
         ok, message = app.enter_workspace(admin_session, workspace["id"], user_id=admin["id"])
         self.assertTrue(ok)
@@ -1533,6 +1539,50 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(blocked_enter["status"], 403)
         self.assertIn("Wrong workspace password", blocked_enter["text"])
 
+    def test_privileged_user_must_add_self_before_entering_explicit_workspace(self) -> None:
+        self.start_server()
+        admin_cookie = self.root_cookie("Admin", "admin-pass")
+        admin = next(user for user in storage.list_users() if user["username"] == "Admin")
+        owner = storage.set_user("owner", password="owner-pass", api_key="owner-api", role="user")
+        workspace = app.create_workspace(
+            "Invite Only",
+            owner_user_id=owner["id"],
+            access_mode="explicit",
+        )
+
+        list_response = self.request("GET", "/api/workspaces", headers={"Cookie": admin_cookie})
+        self.assertEqual(list_response["status"], 200)
+        listed = next(
+            item for item in json.loads(list_response["body"])["workspaces"] if item["id"] == workspace["id"]
+        )
+        self.assertTrue(listed["can_manage_access"])
+
+        blocked_enter = self.select_workspace(admin_cookie, workspace["id"])
+        self.assertEqual(blocked_enter["status"], 403)
+        self.assertIn("Workspace access denied", blocked_enter["text"])
+
+        access_page = self.request(
+            "GET",
+            f"/workspaces/access?workspace={workspace['slug']}",
+            headers={"Cookie": admin_cookie},
+        )
+        self.assertEqual(access_page["status"], 200)
+        token = access_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+        add_self = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/users",
+            body=json.dumps({"user_ids": [admin["id"]]}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": admin_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(add_self["status"], 200)
+
+        allowed_enter = self.select_workspace(admin_cookie, workspace["id"])
+        self.assertEqual(allowed_enter["status"], 200)
+
     def test_workspace_creation_endpoint_accepts_custom_expiry(self) -> None:
         self.start_server()
 
@@ -2167,6 +2217,7 @@ class HttpServerTests(unittest.TestCase):
         root_workspaces = {workspace["id"]: workspace for workspace in root_payload["workspaces"]}
         self.assertTrue(root_workspaces[app.DEFAULT_WORKSPACE_ID]["can_delete"])
         self.assertIn(hidden["id"], root_workspaces)
+        self.assertTrue(root_workspaces[hidden["id"]]["can_manage_access"])
 
     def test_root_can_delete_default_workspace_and_home_redirects_to_workspaces(self) -> None:
         self.start_server()
