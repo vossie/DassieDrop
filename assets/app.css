@@ -997,6 +997,10 @@ input[type="file"] {
 }
 .settings-clear-row {
   margin-top: -4px;
+  margin-bottom: 8px;
+}
+.settings-clear-row:last-of-type {
+  margin-bottom: 0;
 }
 .settings-summary {
   display: grid;
