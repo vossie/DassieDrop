@@ -890,7 +890,6 @@ def begin_user_totp_setup(user_id: str) -> dict:
             "period": TOTP_PERIOD_SECONDS,
             "digits": TOTP_DIGITS,
             "server_time": server_time,
-            "server_code": totp_code(secret, server_time),
         }
 
 
@@ -1033,6 +1032,7 @@ def update_user_secrets(
     user_id: str,
     password: str | None = None,
     api_key: str | None = None,
+    clear_totp: bool = False,
 ) -> dict:
     clean_user_id = str(user_id or "").strip()
     if not clean_user_id:
@@ -1046,6 +1046,10 @@ def update_user_secrets(
             user["password_hash"] = hash_password(password.strip()) if password.strip() else None
         if api_key is not None:
             user["api_key_hash"] = hash_password(api_key.strip()) if api_key.strip() else None
+        if clear_totp:
+            user["totp_secret"] = None
+            user["totp_pending_secret"] = None
+            user["totp_pending_at"] = None
         user["updated_at"] = config.now_ts()
         persist_state_locked()
         return serialize_user(user)

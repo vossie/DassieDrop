@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DassieDrop API
-  version: 1.1.1
+  version: 1.1.2
   description: |
     OpenAPI schema for the DassieDrop HTTP API.
 

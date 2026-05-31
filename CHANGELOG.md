@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 - 2026-05-31
+
+- Fixed authenticator setup over browser keep-alive connections by draining the setup request body before confirmation.
+- Removed the temporary server check code from the authenticator setup UI.
+- Added an installed-service admin password reset script that also clears authenticator protection.
+
 ## 1.1.1 - 2026-05-31
 
 - Added local user management with root, admin, and user roles, per-user API keys, browser login, remember-username support, and logout links.

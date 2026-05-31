@@ -11,7 +11,6 @@ const disableTotpBtn = document.getElementById("disableTotpBtn");
 const totpSetupPanel = document.getElementById("totpSetupPanel");
 const totpQrCode = document.getElementById("totpQrCode");
 const totpServerTime = document.getElementById("totpServerTime");
-const totpServerCode = document.getElementById("totpServerCode");
 const totpSecret = document.getElementById("totpSecret");
 const totpUri = document.getElementById("totpUri");
 const totpCode = document.getElementById("totpCode");
@@ -88,7 +87,6 @@ async function setupTotp() {
     } else {
       totpServerTime.textContent = "";
     }
-    totpServerCode.textContent = payload.server_code ? `Server check code: ${payload.server_code}` : "";
     totpCode.value = "";
     totpSetupPanel.hidden = false;
     editUserStatus.textContent = "Add the secret to your authenticator app.";

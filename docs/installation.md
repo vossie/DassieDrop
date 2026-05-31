@@ -98,7 +98,7 @@ Users can enable an optional authenticator app from their own edit-user page. Da
 
 ### Reset The Installed Admin Password
 
-If you lock yourself out of a native Linux service install, reset the shelve-backed `admin` user password from the server. The Ubuntu and CentOS Stream installers use the same default layout:
+If you lock yourself out of a native Linux service install, reset the shelve-backed `admin` user password from the server. This also disables authenticator app protection for that user. The Ubuntu and CentOS Stream installers use the same default layout:
 
 - app code: `/opt/dassiedrop`
 - upload and shelve data: `/var/lib/dassiedrop/uploads`
@@ -110,12 +110,12 @@ Run:
 sudo systemctl stop dassiedrop
 
 cd /opt/dassiedrop
-sudo -u dassiedrop env UPLOAD_DIR=/var/lib/dassiedrop/uploads /usr/bin/python3.11 -c 'from dassiedrop import storage as s;s.load_persisted_files();u=[x for x in s.list_users() if x["username"].lower()=="admin"][0];s.update_user_secrets(u["id"],password="password");print("admin password reset")'
+sudo -u dassiedrop env PYTHONPATH=/opt/dassiedrop UPLOAD_DIR=/var/lib/dassiedrop/uploads /usr/bin/python3.11 scripts/reset_admin_password.py password
 
 sudo systemctl start dassiedrop
 ```
 
-Change `password="password"` in the command if you want a different replacement password.
+Replace the final `password` argument if you want a different replacement password. To reset a different user, add `--username <name>` before the password.
 
 ## Run With HTTPS
 
