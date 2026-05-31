@@ -35,6 +35,15 @@ async function openWorkspace() {
     }
     window.location.href = "/";
   } catch (error) {
+    try {
+      const stateResponse = await fetch("/api/state", { cache: "no-store" });
+      if (stateResponse.ok) {
+        window.location.href = "/";
+        return;
+      }
+    } catch (stateError) {
+      // Keep the normal wrong-password status below.
+    }
     setWorkspaceOpenStatus("Wrong workspace password.");
   }
 }

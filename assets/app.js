@@ -856,6 +856,21 @@ async function fetchState() {
   }
 }
 
+async function refreshStateAfterTextFailure(previousLatestTextId) {
+  try {
+    const response = await fetch("/api/state", { cache: "no-store" });
+    if (!response.ok) {
+      return false;
+    }
+    const snapshot = await response.json();
+    const nextLatestTextId = snapshot.texts && snapshot.texts.length ? snapshot.texts[0].id : null;
+    renderSnapshot(snapshot);
+    return Boolean(nextLatestTextId && nextLatestTextId !== previousLatestTextId);
+  } catch (error) {
+    return false;
+  }
+}
+
 function websocketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws`;
@@ -942,6 +957,8 @@ async function saveText() {
   const submittedText = content;
   const submittedHidden = hiddenText.checked;
   const submittedPassword = textPassword.value.trim();
+  const previousLatestTextId = latestTextId;
+  let responseOk = false;
 
   pendingTextPush = true;
   textStatus.textContent = "Saving…";
@@ -959,6 +976,7 @@ async function saveText() {
     if (!response.ok) {
       throw new Error(`Save failed: ${response.status}`);
     }
+    responseOk = true;
     const snapshot = await response.json();
     if (snapshot.texts && snapshot.texts.length > 0) {
       suppressedTextId = snapshot.texts[0].id;
@@ -971,6 +989,17 @@ async function saveText() {
     updateHiddenOptions();
     textStatus.textContent = "Text added to history.";
   } catch (error) {
+    if (responseOk || error instanceof TypeError) {
+      const saved = await refreshStateAfterTextFailure(previousLatestTextId);
+      if (saved) {
+        clearEditor();
+        hiddenText.checked = false;
+        textPassword.value = "";
+        updateHiddenOptions();
+        textStatus.textContent = "Text added to history.";
+        return;
+      }
+    }
     textStatus.textContent = "Text save failed.";
   } finally {
     pendingTextPush = false;

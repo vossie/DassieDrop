@@ -1,3 +1,4 @@
+import logging
 import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -11,6 +12,9 @@ from .route_pages import PageRoutesMixin
 from .route_static import StaticRoutesMixin
 from .route_uploads import UploadRoutesMixin
 from .route_websocket import WebSocketRoutesMixin
+
+
+logger = logging.getLogger("dassiedrop.http")
 
 
 class AppHandler(
@@ -171,7 +175,21 @@ class AppHandler(
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+
+    def send_unhandled_error(self, exc: Exception) -> None:
+        logger.exception("Unhandled request error: %s %s", self.command, self.path, exc_info=exc)
+        try:
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Internal server error")
+        except OSError:
+            self.close_connection = True
+
     def do_POST(self) -> None:
+        try:
+            self.handle_post()
+        except Exception as exc:
+            self.send_unhandled_error(exc)
+
+    def handle_post(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/login":
             self.handle_login()
@@ -274,6 +292,12 @@ class AppHandler(
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_DELETE(self) -> None:
+        try:
+            self.handle_delete()
+        except Exception as exc:
+            self.send_unhandled_error(exc)
+
+    def handle_delete(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         if not auth.validate_csrf(self):
             self.send_error(HTTPStatus.FORBIDDEN, "CSRF token required")

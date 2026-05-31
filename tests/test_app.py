@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 
 import app
 from dassiedrop import config, state, storage
-from dassiedrop.http_support import render_template
+from dassiedrop.http_support import get_asset_version, render_template
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -122,12 +122,14 @@ class AppStateTests(unittest.TestCase):
             else:
                 os.environ["APP_VERSION"] = original_value
 
-    def test_rendered_templates_cache_bust_static_assets_with_app_version(self) -> None:
+    def test_rendered_templates_cache_bust_static_assets_with_asset_version(self) -> None:
         rendered = render_template("login.html")
+        asset_version = get_asset_version()
 
-        self.assertIn('/assets/login.css?v=9.9.9', rendered)
-        self.assertIn('/assets/password-toggle.js?v=9.9.9', rendered)
-        self.assertIn('/assets/login.js?v=9.9.9', rendered)
+        self.assertTrue(asset_version.startswith("9.9.9-"))
+        self.assertIn(f'/assets/login.css?v={asset_version}', rendered)
+        self.assertIn(f'/assets/password-toggle.js?v={asset_version}', rendered)
+        self.assertIn(f'/assets/login.js?v={asset_version}', rendered)
         self.assertNotIn("__ASSET_VERSION__", rendered)
 
     def test_update_check_marks_newer_remote_version_available(self) -> None:
@@ -4266,6 +4268,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('id="workspaceOpenPassword"', open_template)
         self.assertIn("__CHANGE_PASSWORD_LINK__", open_template)
         self.assertIn("/api/workspaces/${encodeURIComponent(workspaceId)}/enter", open_script)
+        self.assertIn('fetch("/api/state", { cache: "no-store" })', open_script)
+        self.assertIn("window.location.href = \"/\";", open_script)
         self.assertIn('href="/workspaces"', index)
         self.assertIn('class="hero-brand-link"', index)
         self.assertIn('/assets/DassieDrop-dassie-icon.png', index)
@@ -4397,10 +4401,13 @@ class ScriptTests(unittest.TestCase):
         css = (REPO_ROOT / "assets" / "app.css").read_text(
             encoding="utf-8"
         )
+        self.assertIn('id="saveTextBtn" type="button"', index)
         self.assertIn('id="pasteSendBtn"', index)
         self.assertIn('/assets/cloud_1434863.png', index)
         self.assertIn('const pasteSendBtn = document.getElementById("pasteSendBtn");', script)
         self.assertIn("async function pasteAndSendText()", script)
+        self.assertIn("async function refreshStateAfterTextFailure(previousLatestTextId)", script)
+        self.assertIn('fetch("/api/state", { cache: "no-store" })', script)
         self.assertIn("const clipboardReadAvailable = !!(window.isSecureContext && navigator.clipboard && navigator.clipboard.readText);", script)
         self.assertIn('textEditorWrap.classList.add("clipboard-read-unavailable");', script)
         self.assertIn("window.isSecureContext", script)

@@ -124,6 +124,21 @@ async function loadWorkspaces() {
   }
 }
 
+async function refreshWorkspacesAfterCreate(name) {
+  try {
+    const response = await fetch("/api/workspaces", { cache: "no-store" });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = await response.json();
+    const workspaces = payload.workspaces || [];
+    renderWorkspaces(workspaces, payload.current_workspace_id || null);
+    return workspaces.some((workspace) => workspace.name === name);
+  } catch (error) {
+    return false;
+  }
+}
+
 function workspaceScopeLabel(workspace) {
   if (workspace.access_mode === "explicit") {
     return "Explicit users";
@@ -291,6 +306,17 @@ async function createWorkspace() {
     );
     setWorkspaceStatus("Workspace created.");
   } catch (error) {
+    if (await refreshWorkspacesAfterCreate(name)) {
+      workspaceName.value = "";
+      workspaceExpiry.value = "86400";
+      workspaceMessageExpiry.value = "86400";
+      workspaceAccessMode.value = "public";
+      workspacePassword.value = "";
+      toggleWorkspacePassword();
+      syncMessageExpiryOptions();
+      setWorkspaceStatus("Workspace created.");
+      return;
+    }
     setWorkspaceStatus("Could not create workspace.");
   }
 }

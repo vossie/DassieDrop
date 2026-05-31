@@ -1,4 +1,5 @@
 import html
+import hashlib
 import ssl
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +13,24 @@ def get_share_base_url() -> str:
 
 def get_app_version() -> str:
     return config.load_app_version()
+
+
+def get_asset_version() -> str:
+    digest = hashlib.sha256(get_app_version().encode("utf-8")).hexdigest()
+    hasher = hashlib.sha256(digest.encode("ascii"))
+    try:
+        asset_paths = sorted(path for path in config.ASSETS_DIR.iterdir() if path.is_file())
+    except OSError:
+        return get_app_version()
+    for path in asset_paths:
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        hasher.update(path.name.encode("utf-8", errors="replace"))
+        hasher.update(str(stat.st_size).encode("ascii"))
+        hasher.update(str(stat.st_mtime_ns).encode("ascii"))
+    return f"{get_app_version()}-{hasher.hexdigest()[:12]}"
 
 
 def build_server(host: str, port: int, use_https: bool = False) -> tuple[ThreadingHTTPServer, str]:
@@ -86,7 +105,7 @@ def render_template(name: str, replacements: dict[str, str] | None = None) -> st
     template_path = config.TEMPLATES_DIR / name
     body = template_path.read_text(encoding="utf-8")
     merged_replacements = {
-        "__ASSET_VERSION__": urllib.parse.quote(get_app_version(), safe=""),
+        "__ASSET_VERSION__": urllib.parse.quote(get_asset_version(), safe=""),
         "__UPDATE_NOTICE__": "",
     }
     merged_replacements.update(replacements or {})

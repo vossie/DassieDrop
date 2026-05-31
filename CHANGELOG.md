@@ -8,6 +8,7 @@
 - Restricted authenticator setup to the logged-in user's own account; super-admin users can disable another user's authenticator but cannot enroll one for them.
 - Allowed workspace owners, admins, and super-admin users to delete password-protected and explicit-access workspaces from the workspace list after confirmation, without entering the workspace password.
 - Fixed native service installs so install mode explicitly creates or resets the default `admin` super-admin account to password `password`, while upgrade mode preserves existing credentials.
+- Added asset-content cache busting and client-side mutation reconciliation so installed services do not show false failures from stale JavaScript or dropped mutation responses.
 
 ## 1.1.1 - 2026-05-31
 
