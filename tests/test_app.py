@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 
 import app
 from dassiedrop import config, state, storage
+from dassiedrop.http_support import render_template
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -119,6 +120,14 @@ class AppStateTests(unittest.TestCase):
                 os.environ.pop("APP_VERSION", None)
             else:
                 os.environ["APP_VERSION"] = original_value
+
+    def test_rendered_templates_cache_bust_static_assets_with_app_version(self) -> None:
+        rendered = render_template("login.html")
+
+        self.assertIn('/assets/login.css?v=9.9.9', rendered)
+        self.assertIn('/assets/password-toggle.js?v=9.9.9', rendered)
+        self.assertIn('/assets/login.js?v=9.9.9', rendered)
+        self.assertNotIn("__ASSET_VERSION__", rendered)
 
     def test_update_check_marks_newer_remote_version_available(self) -> None:
         config.UPDATE_CHECK_ENABLED = True

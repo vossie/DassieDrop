@@ -85,7 +85,10 @@ def share_payload(entry_type: str, entry: dict, base_url: str) -> dict:
 def render_template(name: str, replacements: dict[str, str] | None = None) -> str:
     template_path = config.TEMPLATES_DIR / name
     body = template_path.read_text(encoding="utf-8")
-    merged_replacements = {"__UPDATE_NOTICE__": ""}
+    merged_replacements = {
+        "__ASSET_VERSION__": urllib.parse.quote(get_app_version(), safe=""),
+        "__UPDATE_NOTICE__": "",
+    }
     merged_replacements.update(replacements or {})
     for needle, value in merged_replacements.items():
         body = body.replace(needle, value)
