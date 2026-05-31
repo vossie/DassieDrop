@@ -45,7 +45,8 @@ function renderUsers(users) {
     meta.className = "meta workspace-meta";
     const passwordState = user.password_configured ? "password set" : "no password";
     const apiKeyState = user.api_key_configured ? "API key set" : "no API key";
-    meta.textContent = `${user.role} - ${passwordState} - ${apiKeyState} - Updated ${formatUserDate(user.updated_at)}`;
+    const totpState = user.totp_enabled ? "authenticator on" : "authenticator off";
+    meta.textContent = `${user.role} - ${passwordState} - ${apiKeyState} - ${totpState} - Updated ${formatUserDate(user.updated_at)}`;
 
     details.appendChild(name);
     details.appendChild(meta);

@@ -1,5 +1,6 @@
 const loginUsername = document.getElementById("loginUsername");
 const loginPassword = document.getElementById("loginPassword");
+const loginTotpCode = document.getElementById("loginTotpCode");
 const loginBtn = document.getElementById("loginBtn");
 const loginStatus = document.getElementById("loginStatus");
 const rememberUsername = document.getElementById("rememberUsername");
@@ -34,13 +35,24 @@ function updateRememberedUsername() {
 
 async function login() {
   loginStatus.textContent = "Checking…";
+  const payload = { username: loginUsername.value, password: loginPassword.value };
+  if (!loginTotpCode.hidden) {
+    payload.totp_code = loginTotpCode.value.trim();
+  }
   try {
     const response = await fetch("/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: loginUsername.value, password: loginPassword.value })
+      body: JSON.stringify(payload)
     });
     if (!response.ok) {
+      const text = await response.text();
+      if (text.includes("Authenticator code required")) {
+        loginTotpCode.hidden = false;
+        loginTotpCode.focus();
+        loginStatus.textContent = "Enter your authenticator code.";
+        return;
+      }
       loginStatus.textContent = "Wrong username or password.";
       return;
     }
@@ -59,6 +71,21 @@ loginUsername.addEventListener("keydown", (event) => {
 });
 loginPassword.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
+    if (loginTotpCode.hidden) {
+      login();
+    } else {
+      loginTotpCode.focus();
+    }
+  }
+});
+loginTotpCode.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    login();
+  }
+});
+loginTotpCode.addEventListener("input", () => {
+  loginTotpCode.value = loginTotpCode.value.replace(/\D/g, "").slice(0, 6);
+  if (loginTotpCode.value.length === 6) {
     login();
   }
 });

@@ -6,10 +6,19 @@ const editUserPassword = document.getElementById("editUserPassword");
 const editUserApiKey = document.getElementById("editUserApiKey");
 const editUserRole = document.getElementById("editUserRole");
 const editUserRoleField = document.getElementById("editUserRoleField");
+const setupTotpBtn = document.getElementById("setupTotpBtn");
+const disableTotpBtn = document.getElementById("disableTotpBtn");
+const totpSetupPanel = document.getElementById("totpSetupPanel");
+const totpSecret = document.getElementById("totpSecret");
+const totpUri = document.getElementById("totpUri");
+const totpCode = document.getElementById("totpCode");
+const confirmTotpBtn = document.getElementById("confirmTotpBtn");
 const saveEditUserBtn = document.getElementById("saveEditUserBtn");
 const editUserStatus = document.getElementById("editUserStatus");
 const userId = new URLSearchParams(window.location.search).get("id") || "";
 let canManageUsers = false;
+let loadedUser = null;
+let currentUserId = "";
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -31,21 +40,102 @@ async function loadUser() {
     }
     const payload = await response.json();
     canManageUsers = Boolean(payload.can_manage_users);
+    currentUserId = payload.current_user_id || "";
     const user = (payload.users || []).find((candidate) => candidate.id === userId);
     if (!user) {
       editUserStatus.textContent = "User not found.";
       saveEditUserBtn.disabled = true;
       return;
     }
+    loadedUser = user;
     editUserName.value = user.username;
     editUserRole.value = user.role;
     editUserName.disabled = !canManageUsers;
     editUserRole.disabled = !canManageUsers;
     editUserNameField.classList.toggle("user-self-hidden", !canManageUsers);
     editUserRoleField.classList.toggle("user-self-hidden", !canManageUsers);
+    setupTotpBtn.hidden = userId !== currentUserId;
+    disableTotpBtn.hidden = userId !== currentUserId && !canManageUsers;
+    disableTotpBtn.disabled = !user.totp_enabled;
+    setupTotpBtn.textContent = user.totp_enabled ? "Reset Authenticator" : "Set Up";
   } catch (error) {
     editUserStatus.textContent = "Could not load user.";
     saveEditUserBtn.disabled = true;
+  }
+}
+
+async function setupTotp() {
+  editUserStatus.textContent = "Creating authenticator secret...";
+  try {
+    const response = await fetch(`/api/users/${encodeURIComponent(userId)}/totp/setup`, {
+      method: "POST",
+      headers: withCsrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`Authenticator setup failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    totpSecret.value = payload.secret || "";
+    totpUri.value = payload.otpauth_uri || "";
+    totpCode.value = "";
+    totpSetupPanel.hidden = false;
+    editUserStatus.textContent = "Add the secret to your authenticator app.";
+    totpCode.focus();
+  } catch (error) {
+    editUserStatus.textContent = "Could not start authenticator setup.";
+  }
+}
+
+async function confirmTotp() {
+  const code = totpCode.value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    editUserStatus.textContent = "Enter the 6-digit authenticator code.";
+    totpCode.focus();
+    return;
+  }
+  editUserStatus.textContent = "Checking authenticator code...";
+  try {
+    const response = await fetch(`/api/users/${encodeURIComponent(userId)}/totp/confirm`, {
+      method: "POST",
+      headers: withCsrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ code })
+    });
+    if (!response.ok) {
+      throw new Error(`Authenticator confirm failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    loadedUser = payload.user || loadedUser;
+    totpSetupPanel.hidden = true;
+    disableTotpBtn.disabled = false;
+    setupTotpBtn.textContent = "Reset Authenticator";
+    editUserStatus.textContent = "Authenticator enabled.";
+  } catch (error) {
+    editUserStatus.textContent = "Wrong authenticator code.";
+  }
+}
+
+async function disableTotp() {
+  if (loadedUser && !loadedUser.totp_enabled) {
+    return;
+  }
+  editUserStatus.textContent = "Disabling authenticator...";
+  try {
+    const response = await fetch(`/api/users/${encodeURIComponent(userId)}/totp`, {
+      method: "DELETE",
+      headers: withCsrfHeaders({ "Content-Type": "application/json" })
+    });
+    if (!response.ok) {
+      throw new Error(`Authenticator disable failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    loadedUser = payload.user || loadedUser;
+    totpSetupPanel.hidden = true;
+    disableTotpBtn.disabled = true;
+    setupTotpBtn.textContent = "Set Up";
+    editUserStatus.textContent = "Authenticator disabled.";
+  } catch (error) {
+    editUserStatus.textContent = "Could not disable authenticator.";
   }
 }
 
@@ -85,6 +175,9 @@ async function saveEditUser() {
 }
 
 saveEditUserBtn.addEventListener("click", saveEditUser);
+setupTotpBtn.addEventListener("click", setupTotp);
+confirmTotpBtn.addEventListener("click", confirmTotp);
+disableTotpBtn.addEventListener("click", disableTotp);
 editUserName.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     saveEditUser();
@@ -98,6 +191,14 @@ editUserPassword.addEventListener("keydown", (event) => {
 editUserApiKey.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     saveEditUser();
+  }
+});
+totpCode.addEventListener("input", () => {
+  totpCode.value = totpCode.value.replace(/\D/g, "").slice(0, 6);
+});
+totpCode.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    confirmTotp();
   }
 });
 

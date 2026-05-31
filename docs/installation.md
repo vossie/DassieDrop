@@ -94,6 +94,8 @@ Change that password from the Users page after first login.
 
 Root users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
 
+Users can enable an optional authenticator app from their own edit-user page. DassieDrop uses standard TOTP codes, so apps such as Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden, and Aegis can add the displayed secret manually. Root users can disable authenticator protection for any user if someone loses access to their authenticator device.
+
 ### Reset The Installed Admin Password
 
 If you lock yourself out of a native Linux service install, reset the shelve-backed `admin` user password from the server. The Ubuntu and CentOS Stream installers use the same default layout:

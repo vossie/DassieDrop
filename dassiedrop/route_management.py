@@ -108,13 +108,21 @@ class ManagementRoutesMixin:
 
         username = payload.get("username", "")
         password = payload.get("password", "")
+        totp_code = payload.get("totp_code", "")
         if not isinstance(username, str) or not isinstance(password, str):
             self.send_error(HTTPStatus.BAD_REQUEST, "Username and password must be strings")
+            return
+        if not isinstance(totp_code, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Authenticator code must be a string")
             return
         user = auth.login_user(username, password)
         if user is None:
             auth.record_throttle_failure(self, "login")
             self.send_error(HTTPStatus.UNAUTHORIZED, "Wrong username or password")
+            return
+        if user.get("totp_enabled") and not storage.user_totp_code_is_valid(user["id"], totp_code):
+            auth.record_throttle_failure(self, "login")
+            self.send_error(HTTPStatus.UNAUTHORIZED, "Authenticator code required")
             return
 
         auth.clear_throttle_failures(self, "login")
@@ -284,6 +292,63 @@ class ManagementRoutesMixin:
             self.send_error(HTTPStatus.NOT_FOUND, "User not found")
             return
         self.send_json({"ok": True, **self.users_payload()})
+
+    def user_can_manage_totp(self, user_id: str, allow_root: bool = True) -> bool:
+        current_user = auth.current_user(self)
+        if current_user is None:
+            return False
+        if user_id == current_user.get("id"):
+            return True
+        return allow_root and auth.user_has_role(self, {"root"})
+
+    def handle_user_totp_setup(self, user_id: str) -> None:
+        if not self.user_can_manage_totp(user_id, allow_root=False):
+            self.send_error(HTTPStatus.FORBIDDEN, "User account required")
+            return
+        try:
+            payload = storage.begin_user_totp_setup(user_id)
+        except KeyError:
+            self.send_error(HTTPStatus.NOT_FOUND, "User not found")
+            return
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        self.send_json(payload)
+
+    def handle_user_totp_confirm(self, user_id: str) -> None:
+        if not self.user_can_manage_totp(user_id, allow_root=False):
+            self.send_error(HTTPStatus.FORBIDDEN, "User account required")
+            return
+        payload = self.parse_json_body()
+        if payload is None:
+            return
+        code = payload.get("code", "")
+        if not isinstance(code, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Authenticator code must be a string")
+            return
+        try:
+            user = storage.confirm_user_totp_setup(user_id, code)
+        except KeyError:
+            self.send_error(HTTPStatus.NOT_FOUND, "User not found")
+            return
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        self.send_json({"user": user, **self.users_payload()})
+
+    def handle_user_totp_disable(self, user_id: str) -> None:
+        if not self.user_can_manage_totp(user_id, allow_root=True):
+            self.send_error(HTTPStatus.FORBIDDEN, "User account required")
+            return
+        try:
+            user = storage.disable_user_totp(user_id)
+        except KeyError:
+            self.send_error(HTTPStatus.NOT_FOUND, "User not found")
+            return
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        self.send_json({"user": user, **self.users_payload()})
 
     def handle_workspace_enter(self, workspace_selector: str) -> None:
         session_id, session = auth.get_session(self)

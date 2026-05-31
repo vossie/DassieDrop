@@ -1266,6 +1266,24 @@ input[type="file"] {
   flex-wrap: wrap;
   gap: 10px;
 }
+.authenticator-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.totp-setup-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+.totp-setup-panel[hidden] {
+  display: none;
+}
+.totp-setup-panel input[readonly] {
+  background: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86rem;
+}
 .user-item {
   display: flex;
   align-items: center;

@@ -85,6 +85,23 @@
             <option value="root">root - user management</option>
           </select>
         </label>
+        <div class="settings-field authenticator-field">
+          <span class="settings-label-row">
+            <span>Authenticator app</span>
+            <span class="settings-help" tabindex="0" data-tooltip="Optional six-digit TOTP code from an authenticator app. Setup stores a local secret for this user.">?</span>
+          </span>
+          <div class="authenticator-actions">
+            <button id="setupTotpBtn" type="button" class="secondary">Set Up</button>
+            <button id="disableTotpBtn" type="button" class="danger">Disable</button>
+          </div>
+          <div id="totpSetupPanel" class="totp-setup-panel" hidden>
+            <div class="meta">Add this secret to your authenticator app, then enter the current code.</div>
+            <input id="totpSecret" class="inline-input settings-input" type="text" readonly>
+            <input id="totpUri" class="inline-input settings-input" type="text" readonly>
+            <input id="totpCode" class="inline-input settings-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code">
+            <button id="confirmTotpBtn" type="button">Enable Authenticator</button>
+          </div>
+        </div>
         <div class="users-edit-actions">
           <button id="saveEditUserBtn" type="button">Save User</button>
           <a class="workspace-cancel-btn button-link" href="/users">Cancel</a>

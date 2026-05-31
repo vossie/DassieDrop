@@ -596,6 +596,26 @@ class AppStateTests(unittest.TestCase):
         self.assertNotIn("secret-pass", str(stored))
         self.assertNotIn("secret-api", str(stored))
 
+    def test_user_totp_setup_confirms_and_disables(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
+
+        setup = storage.begin_user_totp_setup(user["id"])
+        self.assertIn("secret", setup)
+        self.assertIn("otpauth://totp/DassieDrop%3AAlice", setup["otpauth_uri"])
+        code = storage.totp_code(setup["secret"], self.fake_now())
+        confirmed = storage.confirm_user_totp_setup(user["id"], code)
+
+        self.assertTrue(confirmed["totp_enabled"])
+        self.assertTrue(storage.user_totp_code_is_valid(user["id"], code))
+        users = storage.read_shelved_users()
+        stored = users[user["id"]]
+        self.assertEqual(stored["totp_secret"], setup["secret"])
+        self.assertNotIn("totp_secret", confirmed)
+
+        disabled = storage.disable_user_totp(user["id"])
+        self.assertFalse(disabled["totp_enabled"])
+        self.assertFalse(storage.user_totp_code_is_valid(user["id"], code))
+
     def test_user_creation_rejects_duplicate_usernames(self) -> None:
         storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
 
@@ -1524,6 +1544,89 @@ class HttpServerTests(unittest.TestCase):
         )
 
         self.assertEqual(login["status"], 200)
+
+    def test_user_login_requires_authenticator_code_when_enabled(self) -> None:
+        self.start_server()
+        user = storage.set_user("admin", password="stored-pass", api_key="stored-api", role="root")
+        setup = storage.begin_user_totp_setup(user["id"])
+        code = storage.totp_code(setup["secret"], self.fake_now())
+        storage.confirm_user_totp_setup(user["id"], code)
+
+        missing_code = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin", "password": "stored-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(missing_code["status"], 401)
+        self.assertIn("Authenticator code required", missing_code["text"])
+        bad_code = "000000" if code != "000000" else "111111"
+
+        wrong_code = self.request(
+            "POST",
+            "/login",
+            body=json.dumps(
+                {"username": "admin", "password": "stored-pass", "totp_code": bad_code}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(wrong_code["status"], 401)
+
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps(
+                {"username": "admin", "password": "stored-pass", "totp_code": code}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        self.assertIn("Set-Cookie", login["headers"])
+
+    def test_user_can_manage_own_authenticator_and_root_can_disable(self) -> None:
+        self.start_server()
+        cookie = self.root_cookie()
+        user_id = next(user["id"] for user in storage.list_users() if user["username"] == "admin")
+        token = self.csrf_token(cookie)
+
+        setup_response = self.request(
+            "POST",
+            f"/api/users/{user_id}/totp/setup",
+            body=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(setup_response["status"], 200)
+        setup_payload = json.loads(setup_response["body"])
+        self.assertIn("otpauth_uri", setup_payload)
+
+        confirm_response = self.request(
+            "POST",
+            f"/api/users/{user_id}/totp/confirm",
+            body=json.dumps({"code": storage.totp_code(setup_payload["secret"], self.fake_now())}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(confirm_response["status"], 200)
+        self.assertTrue(json.loads(confirm_response["body"])["user"]["totp_enabled"])
+
+        disable_response = self.request(
+            "DELETE",
+            f"/api/users/{user_id}/totp",
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(disable_response["status"], 200)
+        self.assertFalse(json.loads(disable_response["body"])["user"]["totp_enabled"])
 
     def test_users_pages_and_api_store_hashed_user_secrets(self) -> None:
         self.start_server()
@@ -3561,13 +3664,34 @@ class ScriptTests(unittest.TestCase):
 
         self.assertIn('class="login-form"', template)
         self.assertIn('id="rememberUsername"', template)
+        self.assertIn('id="loginTotpCode"', template)
         self.assertLess(template.index('id="loginUsername"'), template.index('id="loginPassword"'))
         self.assertIn(".login-form {\n  display: grid;\n  gap: 12px;\n}", stylesheet)
         self.assertIn(".remember-row {", stylesheet)
         self.assertIn("input {\n  width: 100%;\n  min-width: 0;", stylesheet)
         self.assertIn('const rememberedUsernameKey = "dassiedrop.rememberedUsername"', script)
+        self.assertIn("totp_code", script)
+        self.assertIn("Authenticator code required", script)
         self.assertIn("window.localStorage.setItem(rememberedUsernameKey, username)", script)
         self.assertNotIn("localStorage.setItem(rememberedUsernameKey, loginPassword", script)
+
+    def test_user_edit_page_exposes_authenticator_setup(self) -> None:
+        template = (REPO_ROOT / "templates" / "user_edit.html").read_text(
+            encoding="utf-8"
+        )
+        script = (REPO_ROOT / "assets" / "user-edit.js").read_text(
+            encoding="utf-8"
+        )
+        stylesheet = (REPO_ROOT / "assets" / "app.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Authenticator app", template)
+        self.assertIn('id="setupTotpBtn"', template)
+        self.assertIn('id="totpSecret"', template)
+        self.assertIn("/totp/setup", script)
+        self.assertIn("/totp/confirm", script)
+        self.assertIn(".totp-setup-panel", stylesheet)
 
     def test_text_panel_exposes_paste_and_send_control(self) -> None:
         index = (REPO_ROOT / "templates" / "index.html").read_text(

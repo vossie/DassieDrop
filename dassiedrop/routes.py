@@ -218,6 +218,20 @@ class AppHandler(
             self.handle_user_save()
             return
 
+        if parsed.path.startswith("/api/users/") and parsed.path.endswith("/totp/setup"):
+            user_id = urllib.parse.unquote(
+                parsed.path.removeprefix("/api/users/").removesuffix("/totp/setup")
+            )
+            self.handle_user_totp_setup(user_id)
+            return
+
+        if parsed.path.startswith("/api/users/") and parsed.path.endswith("/totp/confirm"):
+            user_id = urllib.parse.unquote(
+                parsed.path.removeprefix("/api/users/").removesuffix("/totp/confirm")
+            )
+            self.handle_user_totp_confirm(user_id)
+            return
+
         if parsed.path.startswith("/api/users/"):
             user_id = urllib.parse.unquote(parsed.path.removeprefix("/api/users/"))
             self.handle_user_update(user_id)
@@ -267,6 +281,13 @@ class AppHandler(
         if parsed.path.startswith("/api/workspaces/"):
             workspace_id = urllib.parse.unquote(parsed.path.removeprefix("/api/workspaces/"))
             self.handle_workspace_delete(workspace_id)
+            return
+
+        if parsed.path.startswith("/api/users/") and parsed.path.endswith("/totp"):
+            user_id = urllib.parse.unquote(
+                parsed.path.removeprefix("/api/users/").removesuffix("/totp")
+            )
+            self.handle_user_totp_disable(user_id)
             return
 
         if parsed.path.startswith("/api/users/"):

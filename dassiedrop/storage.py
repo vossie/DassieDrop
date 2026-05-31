@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -6,7 +8,9 @@ import mimetypes
 import re
 import secrets
 import shelve
+import struct
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 from . import config, state
@@ -113,6 +117,9 @@ def make_workspace_id() -> str:
 
 PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
 PASSWORD_HASH_ITERATIONS = 600_000
+TOTP_PERIOD_SECONDS = 30
+TOTP_DIGITS = 6
+TOTP_ISSUER = "DassieDrop"
 
 
 def hash_password(password: str, iterations: int = PASSWORD_HASH_ITERATIONS) -> str:
@@ -150,6 +157,67 @@ def verify_password(password: str, password_hash: str | None) -> bool:
         return False
     actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
     return hmac.compare_digest(actual, expected)
+
+
+def normalize_totp_secret(secret: object) -> str | None:
+    value = str(secret or "").replace(" ", "").strip().upper()
+    if not value:
+        return None
+    try:
+        decode_totp_secret(value)
+    except ValueError:
+        return None
+    return value
+
+
+def decode_totp_secret(secret: str) -> bytes:
+    value = str(secret or "").replace(" ", "").strip().upper()
+    padding = "=" * ((8 - len(value) % 8) % 8)
+    try:
+        decoded = base64.b32decode(f"{value}{padding}", casefold=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Invalid authenticator secret") from exc
+    if not decoded:
+        raise ValueError("Invalid authenticator secret")
+    return decoded
+
+
+def generate_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+
+
+def totp_code(secret: str, timestamp: float | None = None) -> str:
+    key = decode_totp_secret(secret)
+    counter = int((config.now_ts() if timestamp is None else timestamp) // TOTP_PERIOD_SECONDS)
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return str(value % (10 ** TOTP_DIGITS)).zfill(TOTP_DIGITS)
+
+
+def totp_code_is_valid(secret: str, code: str, timestamp: float | None = None, window: int = 1) -> bool:
+    candidate = str(code or "").strip().replace(" ", "")
+    if not re.fullmatch(r"\d{6}", candidate):
+        return False
+    current = config.now_ts() if timestamp is None else timestamp
+    for offset in range(-window, window + 1):
+        if hmac.compare_digest(candidate, totp_code(secret, current + offset * TOTP_PERIOD_SECONDS)):
+            return True
+    return False
+
+
+def totp_uri(username: str, secret: str) -> str:
+    label = urllib.parse.quote(f"{TOTP_ISSUER}:{normalize_username(username)}")
+    query = urllib.parse.urlencode(
+        {
+            "secret": secret,
+            "issuer": TOTP_ISSUER,
+            "algorithm": "SHA1",
+            "digits": str(TOTP_DIGITS),
+            "period": str(TOTP_PERIOD_SECONDS),
+        }
+    )
+    return f"otpauth://totp/{label}?{query}"
 
 
 def path_within_root(root: Path, candidate: Path) -> bool:
@@ -655,6 +723,8 @@ def normalize_users(users: object) -> dict:
             "api_key_hash": user.get("api_key_hash")
             if isinstance(user.get("api_key_hash"), str)
             else None,
+            "totp_secret": normalize_totp_secret(user.get("totp_secret")),
+            "totp_pending_secret": normalize_totp_secret(user.get("totp_pending_secret")),
             "created_at": restore_ts(user.get("created_at")),
             "updated_at": restore_ts(user.get("updated_at") or user.get("created_at")),
         }
@@ -676,6 +746,7 @@ def serialize_user(user: dict) -> dict:
         "role": normalize_user_role(user.get("role")),
         "password_configured": bool(user.get("password_hash")),
         "api_key_configured": bool(user.get("api_key_hash")),
+        "totp_enabled": bool(user.get("totp_secret")),
         "created_at": user.get("created_at"),
         "updated_at": user.get("updated_at"),
     }
@@ -719,6 +790,8 @@ def ensure_bootstrap_root_user_locked() -> bool:
         "role": "root",
         "password_hash": password_hash,
         "api_key_hash": api_key_hash,
+        "totp_secret": None,
+        "totp_pending_secret": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -779,6 +852,76 @@ def authenticate_user(username: str, password: str) -> dict | None:
         return serialize_user(user)
 
 
+def user_totp_code_is_valid(user_id: str, code: str) -> bool:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        return False
+    with state.state_lock:
+        user = get_users_locked().get(clean_user_id)
+        if user is None:
+            return False
+        secret = normalize_totp_secret(user.get("totp_secret"))
+    return bool(secret) and totp_code_is_valid(secret, code)
+
+
+def begin_user_totp_setup(user_id: str) -> dict:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        raise ValueError("User ID required")
+    with state.state_lock:
+        users = get_users_locked()
+        user = users.get(clean_user_id)
+        if user is None:
+            raise KeyError("User not found")
+        secret = generate_totp_secret()
+        user["totp_pending_secret"] = secret
+        user["updated_at"] = config.now_ts()
+        persist_state_locked()
+        return {
+            "secret": secret,
+            "otpauth_uri": totp_uri(user["username"], secret),
+            "period": TOTP_PERIOD_SECONDS,
+            "digits": TOTP_DIGITS,
+        }
+
+
+def confirm_user_totp_setup(user_id: str, code: str) -> dict:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        raise ValueError("User ID required")
+    with state.state_lock:
+        users = get_users_locked()
+        user = users.get(clean_user_id)
+        if user is None:
+            raise KeyError("User not found")
+        secret = normalize_totp_secret(user.get("totp_pending_secret"))
+        if not secret:
+            raise ValueError("Authenticator setup has not been started")
+        if not totp_code_is_valid(secret, code):
+            raise ValueError("Wrong authenticator code")
+        user["totp_secret"] = secret
+        user["totp_pending_secret"] = None
+        user["updated_at"] = config.now_ts()
+        persist_state_locked()
+        return serialize_user(user)
+
+
+def disable_user_totp(user_id: str) -> dict:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        raise ValueError("User ID required")
+    with state.state_lock:
+        users = get_users_locked()
+        user = users.get(clean_user_id)
+        if user is None:
+            raise KeyError("User not found")
+        user["totp_secret"] = None
+        user["totp_pending_secret"] = None
+        user["updated_at"] = config.now_ts()
+        persist_state_locked()
+        return serialize_user(user)
+
+
 def api_key_user(api_key: str) -> dict | None:
     candidate = api_key.strip()
     if not candidate:
@@ -813,6 +956,8 @@ def set_user(
             "role": clean_role,
             "password_hash": None,
             "api_key_hash": None,
+            "totp_secret": None,
+            "totp_pending_secret": None,
             "created_at": now,
             "updated_at": now,
         }
