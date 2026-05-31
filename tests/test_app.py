@@ -960,14 +960,20 @@ class HttpServerTests(unittest.TestCase):
 
         self.assertEqual(login["status"], 200)
 
-    def test_users_page_and_api_store_hashed_user_secrets(self) -> None:
+    def test_users_pages_and_api_store_hashed_user_secrets(self) -> None:
         self.start_server()
 
-        page = self.request("GET", "/users")
-        self.assertEqual(page["status"], 200)
-        self.assertIn("DassieDrop Users", page["text"])
-        cookie = page["headers"]["Set-Cookie"].split(";", 1)[0]
-        token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+        users_page = self.request("GET", "/users")
+        self.assertEqual(users_page["status"], 200)
+        self.assertIn("DassieDrop Users", users_page["text"])
+        self.assertIn('href="/users/new"', users_page["text"])
+        self.assertIn("cancelEditUserBtn", users_page["text"])
+        cookie = users_page["headers"]["Set-Cookie"].split(";", 1)[0]
+
+        new_user_page = self.request("GET", "/users/new", headers={"Cookie": cookie})
+        self.assertEqual(new_user_page["status"], 200)
+        self.assertIn("DassieDrop Add User", new_user_page["text"])
+        token = new_user_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
         response = self.request(
             "POST",

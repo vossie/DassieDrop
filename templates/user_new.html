@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DassieDrop Users</title>
+  <title>DassieDrop Add User</title>
   <meta name="dassiedrop-csrf-token" content="__CSRF_TOKEN__">
   <link rel="icon" type="image/png" href="/assets/DassieDrop-dassie-icon.png">
   <link rel="stylesheet" href="/assets/app.css">
@@ -22,12 +22,12 @@
               </a>
             </div>
             <div class="workspace-selector-wrap">
-              <a class="workspace-pill" href="/settings" aria-label="Back to settings" title="Back to settings">
-                <span class="workspace-pill-label">Back to Settings</span>
+              <a class="workspace-pill" href="/users" aria-label="Back to users" title="Back to users">
+                <span class="workspace-pill-label">Back to Users</span>
               </a>
             </div>
           </div>
-          <h1 class="sr-only">DassieDrop Users</h1>
+          <h1 class="sr-only">DassieDrop Add User</h1>
         </div>
       </div>
     </section>
@@ -38,54 +38,44 @@
   <section class="grid">
     <article class="panel tab-panel workspace-panel">
       <div class="panel-title">
-        <h2>Users</h2>
-        <div class="meta">Stored only for the upcoming user system. These users are not active for login or access checks yet.</div>
+        <h2>Add User</h2>
+        <div class="meta">Creates a stored user record for the upcoming user system.</div>
       </div>
 
-      <div class="users-toolbar">
-        <a class="workspace-pill" href="/users/new">
-          <span class="workspace-pill-label">Add User</span>
-        </a>
-      </div>
-
-      <div id="editUserPanel" class="settings-form users-form hidden" aria-hidden="true">
-        <div class="panel-title users-edit-title">
-          <h3>Edit User</h3>
-          <div class="meta">Leave password or API key blank to keep the stored value.</div>
-        </div>
-        <label class="settings-field" for="editUserName">
+      <div class="settings-form users-form">
+        <label class="settings-field" for="newUserName">
           <span>Username</span>
-          <input id="editUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
+          <input id="newUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
         </label>
-        <label class="settings-field" for="editUserPassword">
+        <label class="settings-field" for="newUserPassword">
           <span>Password</span>
-          <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+          <input id="newUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
         </label>
-        <label class="settings-field" for="editUserApiKey">
+        <label class="settings-field" for="newUserApiKey">
           <span>API key</span>
-          <input id="editUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+          <input id="newUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
         </label>
-        <label class="settings-field" for="editUserRole">
+        <label class="settings-field" for="newUserRole">
           <span>Role</span>
-          <select id="editUserRole" class="inline-input settings-input">
+          <select id="newUserRole" class="inline-input settings-input">
             <option value="user">user - password-protected workspace access</option>
             <option value="admin">admin - any workspace access</option>
             <option value="root">root - settings and user management</option>
           </select>
         </label>
         <div class="users-edit-actions">
-          <button id="saveEditUserBtn" type="button">Save User</button>
-          <button id="cancelEditUserBtn" class="workspace-cancel-btn" type="button">Cancel</button>
+          <button id="createUserBtn" type="button">Create User</button>
+          <a class="workspace-cancel-btn button-link" href="/users">Cancel</a>
         </div>
       </div>
-      <div class="status" id="usersStatus"></div>
-      <ul class="history-list users-list" id="usersList"></ul>
+
+      <div class="status" id="newUserStatus"></div>
     </article>
   </section>
 
   <footer class="app-footer" aria-label="Licensing and privacy notice">
     <p class="footer-line">
-      <a class="footer-link" href="/">Share</a>
+      <a class="footer-link" href="/users">Users</a>
       ·
       <a class="footer-link" href="/settings">Settings</a>
       ·
@@ -103,6 +93,6 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
-<script src="/assets/users.js"></script>
+<script src="/assets/user-new.js"></script>
 </body>
 </html>

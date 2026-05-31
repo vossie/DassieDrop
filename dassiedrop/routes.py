@@ -205,6 +205,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_users_page()
             return
 
+        if parsed.path == "/users/new":
+            self.handle_new_user_page()
+            return
+
         if parsed.path == "/help":
             self.handle_help_page()
             return
@@ -493,6 +497,24 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_html(
             render_template(
                 "users.html",
+                {
+                    "__APP_VERSION__": html.escape(get_app_version()),
+                    "__UPDATE_NOTICE__": update_notice_html(),
+                    "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                },
+            ),
+            cookie=cookie,
+        )
+
+    def handle_new_user_page(self) -> None:
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
+            self.send_html(render_template("login.html"))
+            return
+
+        _, session, cookie = auth.ensure_browser_session(self)
+        self.send_html(
+            render_template(
+                "user_new.html",
                 {
                     "__APP_VERSION__": html.escape(get_app_version()),
                     "__UPDATE_NOTICE__": update_notice_html(),

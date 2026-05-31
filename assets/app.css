@@ -1074,12 +1074,39 @@ input[type="file"] {
 .users-form {
   margin-bottom: 16px;
 }
+.users-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 14px;
+}
+.users-edit-title {
+  margin-bottom: 0;
+}
+.users-edit-title h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.users-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .user-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  text-decoration: none;
+  font-weight: 700;
 }
 .dropzone {
   margin-top: 12px;
