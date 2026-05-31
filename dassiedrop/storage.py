@@ -871,16 +871,20 @@ def begin_user_totp_setup(user_id: str) -> dict:
         user = users.get(clean_user_id)
         if user is None:
             raise KeyError("User not found")
-        secret = generate_totp_secret()
-        user["totp_pending_secret"] = secret
-        user["updated_at"] = config.now_ts()
-        persist_state_locked()
+        secret = normalize_totp_secret(user.get("totp_pending_secret"))
+        if not secret:
+            secret = generate_totp_secret()
+            user["totp_pending_secret"] = secret
+            user["updated_at"] = config.now_ts()
+            persist_state_locked()
+        server_time = config.now_ts()
         return {
             "secret": secret,
             "otpauth_uri": totp_uri(user["username"], secret),
             "qr_svg": qr_svg(totp_uri(user["username"], secret)),
             "period": TOTP_PERIOD_SECONDS,
             "digits": TOTP_DIGITS,
+            "server_time": server_time,
         }
 
 

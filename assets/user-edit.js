@@ -10,6 +10,7 @@ const setupTotpBtn = document.getElementById("setupTotpBtn");
 const disableTotpBtn = document.getElementById("disableTotpBtn");
 const totpSetupPanel = document.getElementById("totpSetupPanel");
 const totpQrCode = document.getElementById("totpQrCode");
+const totpServerTime = document.getElementById("totpServerTime");
 const totpSecret = document.getElementById("totpSecret");
 const totpUri = document.getElementById("totpUri");
 const totpCode = document.getElementById("totpCode");
@@ -80,6 +81,12 @@ async function setupTotp() {
     totpQrCode.innerHTML = payload.qr_svg || "";
     totpSecret.value = payload.secret || "";
     totpUri.value = payload.otpauth_uri || "";
+    if (payload.server_time) {
+      const serverDate = new Date(payload.server_time * 1000);
+      totpServerTime.textContent = `Server time: ${serverDate.toISOString().replace(".000", "")}`;
+    } else {
+      totpServerTime.textContent = "";
+    }
     totpCode.value = "";
     totpSetupPanel.hidden = false;
     editUserStatus.textContent = "Add the secret to your authenticator app.";
@@ -104,7 +111,8 @@ async function confirmTotp() {
       body: JSON.stringify({ code })
     });
     if (!response.ok) {
-      throw new Error(`Authenticator confirm failed: ${response.status}`);
+      const message = await response.text();
+      throw new Error(message || `Authenticator confirm failed: ${response.status}`);
     }
     const payload = await response.json();
     loadedUser = payload.user || loadedUser;
@@ -113,7 +121,7 @@ async function confirmTotp() {
     setupTotpBtn.textContent = "Reset Authenticator";
     editUserStatus.textContent = "Authenticator enabled.";
   } catch (error) {
-    editUserStatus.textContent = "Wrong authenticator code.";
+    editUserStatus.textContent = "Wrong authenticator code. Check that your phone time matches the server time shown above.";
   }
 }
 
