@@ -1679,6 +1679,36 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(disable_response["status"], 200)
         self.assertFalse(json.loads(disable_response["body"])["user"]["totp_enabled"])
 
+    def test_root_cannot_set_up_another_users_authenticator(self) -> None:
+        self.start_server()
+        root_cookie = self.root_cookie()
+        other = storage.set_user("alice", password="secret-pass", api_key="alice-api", role="user")
+        setup = storage.begin_user_totp_setup(other["id"])
+        storage.confirm_user_totp_setup(other["id"], storage.totp_code(setup["secret"], setup["server_time"]))
+        token = self.csrf_token(root_cookie)
+        headers = {
+            "Content-Type": "application/json",
+            "Cookie": root_cookie,
+            "X-CSRF-Token": token,
+        }
+
+        blocked_setup = self.request(
+            "POST",
+            f"/api/users/{other['id']}/totp/setup",
+            body=b"{}",
+            headers=headers,
+        )
+        self.assertEqual(blocked_setup["status"], 403)
+        self.assertTrue(storage.get_user(other["id"])["totp_enabled"])
+
+        disable = self.request(
+            "DELETE",
+            f"/api/users/{other['id']}/totp",
+            headers=headers,
+        )
+        self.assertEqual(disable["status"], 200)
+        self.assertFalse(storage.get_user(other["id"])["totp_enabled"])
+
     def test_user_totp_setup_drains_body_before_confirm_on_same_connection(self) -> None:
         self.start_server()
         cookie = self.root_cookie()
@@ -3784,6 +3814,9 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("totpQrCode.innerHTML", script)
         self.assertIn("totpServerTime.textContent", script)
         self.assertNotIn("totpServerCode.textContent", script)
+        self.assertIn("Users must set up their own authenticator app.", script)
+        self.assertIn("setupTotpBtn.hidden = userId !== currentUserId", script)
+        self.assertIn("disableTotpBtn.hidden = userId !== currentUserId && !canManageUsers", script)
         self.assertIn("/totp/setup", script)
         self.assertIn("/totp/confirm", script)
         self.assertIn(".totp-qr-code", stylesheet)

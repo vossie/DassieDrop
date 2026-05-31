@@ -67,6 +67,10 @@ async function loadUser() {
 }
 
 async function setupTotp() {
+  if (userId !== currentUserId) {
+    editUserStatus.textContent = "Users must set up their own authenticator app.";
+    return;
+  }
   editUserStatus.textContent = "Creating authenticator secret...";
   try {
     const response = await fetch(`/api/users/${encodeURIComponent(userId)}/totp/setup`, {

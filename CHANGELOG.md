@@ -5,6 +5,7 @@
 - Fixed authenticator setup over browser keep-alive connections by draining the setup request body before confirmation.
 - Removed the temporary server check code from the authenticator setup UI.
 - Added an installed-service admin password reset script that also clears authenticator protection.
+- Restricted authenticator setup to the logged-in user's own account; root users can disable another user's authenticator but cannot enroll one for them.
 
 ## 1.1.1 - 2026-05-31
 
