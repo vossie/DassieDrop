@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.1 - 2026-05-31
 
 - Added local user management with root, admin, and user roles, per-user API keys, browser login, remember-username support, and logout links.
 - Replaced the old global app access code, global API key, and workspace super password with the user system. New installs create a root user named `admin` with password `password`.
