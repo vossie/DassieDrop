@@ -85,14 +85,14 @@
             <option value="root">root - user management</option>
           </select>
         </label>
-        <div id="authenticatorField" class="settings-field authenticator-field">
+        <div id="authenticatorField" class="settings-field authenticator-field" hidden>
           <span class="settings-label-row">
             <span>Authenticator app</span>
             <span class="settings-help" tabindex="0" data-tooltip="Optional six-digit TOTP code from an authenticator app. Setup stores a local secret for this user.">?</span>
           </span>
           <div class="authenticator-actions">
-            <button id="setupTotpBtn" type="button" class="secondary">Set Up</button>
-            <button id="disableTotpBtn" type="button" class="danger">Disable</button>
+            <button id="setupTotpBtn" type="button" class="secondary" hidden>Set Up</button>
+            <button id="disableTotpBtn" type="button" class="danger" hidden>Disable</button>
           </div>
           <div id="totpSetupPanel" class="totp-setup-panel" hidden>
             <div class="meta">Add this secret to your authenticator app, then enter the current code.</div>

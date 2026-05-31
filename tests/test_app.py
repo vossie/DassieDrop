@@ -3806,7 +3806,9 @@ class ScriptTests(unittest.TestCase):
         )
 
         self.assertIn("Authenticator app", template)
-        self.assertIn('id="setupTotpBtn"', template)
+        self.assertIn('id="authenticatorField" class="settings-field authenticator-field" hidden', template)
+        self.assertIn('id="setupTotpBtn" type="button" class="secondary" hidden', template)
+        self.assertIn('id="disableTotpBtn" type="button" class="danger" hidden', template)
         self.assertIn('id="totpQrCode"', template)
         self.assertIn('id="totpServerTime"', template)
         self.assertNotIn('id="totpServerCode"', template)
