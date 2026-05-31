@@ -961,10 +961,12 @@ input[type="file"] {
 .password-toggle-btn:hover {
   background: #eef2f7;
   color: var(--accent);
+  transform: translateY(-50%);
 }
 .password-toggle-btn:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+  transform: translateY(-50%);
 }
 .password-eye-icon,
 .password-eye-icon::before,
