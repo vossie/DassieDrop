@@ -8,7 +8,7 @@ from tests.support import CoreStateTestCase, make_app_handler
 
 class AuthTests(CoreStateTestCase):
     def test_user_auth_blocks_unauthorised_access_and_allows_valid_api_key(self) -> None:
-        storage.set_user("admin", password="secret-pass", api_key="api-secret", role="root")
+        storage.set_user("admin", password="secret-pass", api_key="api-secret", role="super-admin")
 
         unauthorized_handler = make_app_handler(headers={})
         self.assertFalse(auth.is_authorized(unauthorized_handler))
@@ -22,13 +22,13 @@ class AuthTests(CoreStateTestCase):
         self.assertIsNone(auth.login_user("admin", "wrong"))
 
     def test_x_api_key_does_not_fallback_to_user_password(self) -> None:
-        storage.set_user("admin", password="secret-pass", api_key="", role="root")
+        storage.set_user("admin", password="secret-pass", api_key="", role="super-admin")
 
         authorized_handler = make_app_handler(headers={"X-API-Key": "secret-pass"})
         self.assertFalse(auth.is_authorized(authorized_handler))
 
     def test_user_api_key_authorizes_requests(self) -> None:
-        storage.set_user("admin", password="stored-pass", api_key="stored-api", role="root")
+        storage.set_user("admin", password="stored-pass", api_key="stored-api", role="super-admin")
         api_handler = make_app_handler(headers={"X-API-Key": "stored-api"})
 
         self.assertTrue(auth.is_authorized(api_handler))

@@ -296,4 +296,4 @@ echo "To change HTTP port or HTTPS settings:"
 echo "  sudoedit ${ENV_FILE}"
 echo "  sudo systemctl restart ${SERVICE_NAME}"
 echo
-echo "Default root user on first start: admin / password"
+echo "Default super-admin user on first start: admin / password"

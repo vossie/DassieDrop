@@ -89,12 +89,12 @@ HTTPS_SELF_SIGNED_HOST=192.168.1.24
 
 ## Default User
 
-On a new installation DassieDrop creates a root user named `admin` with password `password`.
+On a new installation DassieDrop creates a super-admin user named `admin` with password `password`.
 Change that password from the Users page after first login.
 
-Root users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
+Super-admin users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
 
-Users can enable an optional authenticator app from their own edit-user page. DassieDrop uses standard TOTP codes, so apps such as Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden, and Aegis can scan the displayed QR code or add the displayed secret manually. Root users can disable authenticator protection for any user if someone loses access to their authenticator device.
+Users can enable an optional authenticator app from their own edit-user page. DassieDrop uses standard TOTP codes, so apps such as Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden, and Aegis can scan the displayed QR code or add the displayed secret manually. Super-admin users can disable authenticator protection for any user if someone loses access to their authenticator device.
 
 ### Reset The Installed Admin Password
 

@@ -196,7 +196,7 @@ class CoreHttpTestCase(unittest.TestCase):
                 "admin",
                 password=access_code,
                 api_key=api_key or access_code,
-                role="root",
+                role="super-admin",
             )
         app.start_background_tasks()
         self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.AppHandler)

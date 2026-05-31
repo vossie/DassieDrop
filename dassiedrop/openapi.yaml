@@ -126,7 +126,7 @@ paths:
     delete:
       tags: [Workspaces]
       summary: Delete a workspace
-      description: Only workspace managers can delete workspaces. The default workspace can only be deleted by a root user.
+      description: Only workspace managers can delete workspaces. The default workspace can only be deleted by a super-admin user.
       security:
         - sessionCookie: []
         - apiKeyAuth: []
@@ -159,7 +159,7 @@ paths:
       tags: [Workspaces]
       summary: Replace the explicit access user list for a workspace
       description: |
-        Only the workspace owner, an admin user, or a root user can manage
+        Only the workspace owner, an admin user, or a super-admin user can manage
         explicit workspace access. API clients may authenticate with
         `X-API-Key`; browser sessions use the session cookie and CSRF token.
       security:
@@ -193,7 +193,7 @@ paths:
     post:
       tags: [Workspaces]
       summary: Change a password-protected workspace password
-      description: Only the workspace owner, an admin user, or a root user can change the password.
+      description: Only the workspace owner, an admin user, or a super-admin user can change the password.
       security:
         - sessionCookie: []
         - apiKeyAuth: []
@@ -911,6 +911,9 @@ components:
         can_delete:
           type: boolean
           description: Present on workspace list items when the current user can delete the workspace.
+        can_manage_access:
+          type: boolean
+          description: Present on workspace list items when the current user can manage password or explicit access.
         expiry_seconds:
           type: integer
           minimum: 0

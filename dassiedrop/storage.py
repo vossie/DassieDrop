@@ -533,38 +533,13 @@ def workspace_password_is_valid(workspace: dict, password: str) -> bool:
     return verify_password(password, workspace.get("password_hash"))
 
 
-def privileged_user_password_is_valid_for_user(user_id: str | None, password: str) -> bool:
-    clean_user_id = str(user_id or "").strip()
-    candidate = password.strip()
-    if not clean_user_id or not candidate:
-        return False
-    with state.state_lock:
-        user = get_users_locked().get(clean_user_id)
-        if user is None or normalize_user_role(user.get("role")) not in {"root", "admin"}:
-            return False
-        return secret_matches_hash(candidate, user.get("password_hash"))
-
-
-def workspace_password_or_user_override_is_valid(
-    workspace: dict,
-    password: str,
-    user_id: str | None = None,
-) -> bool:
-    candidate = password.strip()
-    if not candidate:
-        return False
-    if workspace_password_is_valid(workspace, candidate):
-        return True
-    return privileged_user_password_is_valid_for_user(user_id, candidate)
-
-
 def workspace_access_mode(workspace: dict) -> str:
     return normalize_workspace_access_mode(workspace.get("access_mode"), workspace.get("password_hash"))
 
 
 def user_is_privileged_locked(user_id: str) -> bool:
     user = get_users_locked().get(str(user_id or "").strip())
-    return user is not None and normalize_user_role(user.get("role")) in {"root", "admin"}
+    return user is not None and normalize_user_role(user.get("role")) in {"super-admin", "admin"}
 
 
 def workspace_user_can_access(workspace: dict, user_id: str | None) -> bool:
@@ -610,11 +585,7 @@ def workspace_delete_password_is_valid(
 ) -> bool:
     if workspace.get("password_hash") is None:
         return True
-    return workspace_password_or_user_override_is_valid(workspace, password, user_id=user_id)
-
-
-def workspace_delete_uses_super_password(password: str, user_id: str | None = None) -> bool:
-    return privileged_user_password_is_valid_for_user(user_id, password)
+    return workspace_password_is_valid(workspace, password.strip())
 
 
 def serialize_workspace_summary(workspace: dict) -> dict:
@@ -659,7 +630,7 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
 PERSISTED_PAYLOAD_KEY = "payload"
 PERSISTED_SETTINGS_KEY = "settings"
 PERSISTED_USERS_KEY = "users"
-USER_ROLES = ("root", "admin", "user")
+USER_ROLES = ("super-admin", "admin", "user")
 
 
 def default_app_settings() -> dict:
@@ -694,6 +665,8 @@ def secret_matches_hash(candidate: str, password_hash: str | None) -> bool:
 
 def normalize_user_role(role: object) -> str:
     value = str(role or "").strip().lower()
+    if value == "root":
+        return "super-admin"
     return value if value in USER_ROLES else "user"
 
 
@@ -781,19 +754,46 @@ def list_users() -> list[dict]:
         return [serialize_user(user) for user in users]
 
 
+def migrate_legacy_root_roles() -> int:
+    changed = 0
+    if shelve_index_exists():
+        with shelve.open(str(uploads_index_path()), writeback=True) as index:
+            users = index.get(PERSISTED_USERS_KEY, {})
+            if isinstance(users, dict):
+                for user in users.values():
+                    if not isinstance(user, dict):
+                        continue
+                    if str(user.get("role") or "").strip().lower() == "root":
+                        user["role"] = "super-admin"
+                        user["updated_at"] = config.now_ts()
+                        changed += 1
+                if changed:
+                    index[PERSISTED_USERS_KEY] = users
+                    index.sync()
+    with state.state_lock:
+        for user in get_users_locked().values():
+            if str(user.get("role") or "").strip().lower() == "root":
+                user["role"] = "super-admin"
+                user["updated_at"] = config.now_ts()
+                changed += 1
+        if changed:
+            persist_state_locked()
+    return changed
+
+
 def root_user_exists_locked() -> bool:
-    return any(normalize_user_role(user.get("role")) == "root" for user in get_users_locked().values())
+    return any(normalize_user_role(user.get("role")) == "super-admin" for user in get_users_locked().values())
 
 
 def root_user_count_locked() -> int:
-    return sum(1 for user in get_users_locked().values() if normalize_user_role(user.get("role")) == "root")
+    return sum(1 for user in get_users_locked().values() if normalize_user_role(user.get("role")) == "super-admin")
 
 
 def is_last_root_user_locked(user_id: str) -> bool:
     user = get_users_locked().get(user_id)
     return (
         user is not None
-        and normalize_user_role(user.get("role")) == "root"
+        and normalize_user_role(user.get("role")) == "super-admin"
         and root_user_count_locked() <= 1
     )
 
@@ -809,7 +809,7 @@ def ensure_bootstrap_root_user_locked() -> bool:
     get_users_locked()[user_id] = {
         "id": user_id,
         "username": "admin",
-        "role": "root",
+        "role": "super-admin",
         "password_hash": password_hash,
         "api_key_hash": api_key_hash,
         "totp_secret": None,
@@ -832,7 +832,7 @@ def repair_default_root_user_from_legacy_settings_locked() -> bool:
     user = next(iter(users.values()))
     if user.get("username", "").lower() != "admin":
         return False
-    if normalize_user_role(user.get("role")) != "root":
+    if normalize_user_role(user.get("role")) != "super-admin":
         return False
     if not verify_password("password", user.get("password_hash")):
         return False
@@ -1036,8 +1036,8 @@ def update_user(
         duplicate = find_user_by_username_locked(clean_username)
         if duplicate is not None and duplicate.get("id") != clean_user_id:
             raise ValueError("Username already exists")
-        if is_last_root_user_locked(clean_user_id) and clean_role != "root":
-            raise ValueError("At least one root user is required")
+        if is_last_root_user_locked(clean_user_id) and clean_role != "super-admin":
+            raise ValueError("At least one super-admin user is required")
         user["username"] = clean_username
         user["role"] = clean_role
         if password is not None:
@@ -1085,7 +1085,7 @@ def delete_user(user_id: str) -> bool:
         if clean_user_id not in users:
             return False
         if is_last_root_user_locked(clean_user_id):
-            raise ValueError("At least one root user is required")
+            raise ValueError("At least one super-admin user is required")
         users.pop(clean_user_id)
         persist_state_locked()
         return True
@@ -1604,11 +1604,7 @@ def enter_workspace(
         return (False, "Workspace not found")
     if not workspace_user_can_access(workspace, user_id):
         return (False, "Workspace access denied")
-    if workspace.get("password_hash") and not workspace_delete_password_is_valid(
-        workspace,
-        password,
-        user_id=user_id,
-    ):
+    if workspace.get("password_hash") and not workspace_password_is_valid(workspace, password.strip()):
         return (False, "Wrong workspace password")
 
     with state.state_lock:

@@ -33,7 +33,7 @@ function optionForUser(user) {
 
 function selectableUsers() {
   const ownerId = workspace ? workspace.owner_user_id : "";
-  return users.filter((user) => user.id && user.id !== ownerId && user.role !== "root" && user.role !== "admin");
+  return users.filter((user) => user.id && user.id !== ownerId && user.role !== "super-admin" && user.role !== "admin");
 }
 
 function renderAccessLists() {

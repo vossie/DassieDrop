@@ -26,10 +26,9 @@ class StaticRoutesMixin:
         if (
             workspace.get("password_hash")
             and current_workspace_id != workspace["id"]
-            and not storage.workspace_password_or_user_override_is_valid(
+            and not storage.workspace_password_is_valid(
                 workspace,
-                workspace_password,
-                user_id=self.current_user_id(),
+                workspace_password.strip(),
             )
         ):
             auth.record_throttle_failure(self, "file-download", file_id)
@@ -63,10 +62,9 @@ class StaticRoutesMixin:
         if (
             workspace.get("password_hash")
             and current_workspace_id != workspace["id"]
-            and not storage.workspace_password_or_user_override_is_valid(
+            and not storage.workspace_password_is_valid(
                 workspace,
-                workspace_password,
-                user_id=self.current_user_id(),
+                workspace_password.strip(),
             )
         ):
             auth.record_throttle_failure(self, "file-preview", file_id)

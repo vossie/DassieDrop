@@ -5,24 +5,24 @@
 - Fixed authenticator setup over browser keep-alive connections by draining the setup request body before confirmation.
 - Removed the temporary server check code from the authenticator setup UI.
 - Added an installed-service admin password reset script that also clears authenticator protection.
-- Restricted authenticator setup to the logged-in user's own account; root users can disable another user's authenticator but cannot enroll one for them.
+- Restricted authenticator setup to the logged-in user's own account; super-admin users can disable another user's authenticator but cannot enroll one for them.
 
 ## 1.1.1 - 2026-05-31
 
-- Added local user management with root, admin, and user roles, per-user API keys, browser login, remember-username support, and logout links.
-- Replaced the old global app access code, global API key, and workspace super password with the user system. New installs create a root user named `admin` with password `password`.
-- Enforced that at least one root user always remains; root users can manage every account, while non-root users can only update their own password and API key.
-- Added workspace access modes: public, password-protected, and explicit user access. Workspace owners, admins, and root users can manage access.
+- Added local user management with super-admin, admin, and user roles, per-user API keys, browser login, remember-username support, and logout links.
+- Replaced the old global app access code, global API key, and workspace super password with the user system. New installs create a super-admin user named `admin` with password `password`.
+- Enforced that at least one super-admin user always remains; super-admin users can manage every account, while non-super-admin users can only update their own password and API key.
+- Added workspace access modes: public, password-protected, and explicit user access. Workspace owners, admins, and super-admin users can manage access.
 - Associated custom workspaces with the user that created them.
 - Added workspace-level expiry and message/file expiry controls. Message and file expiry is capped so entries cannot outlive their workspace, and startup migration repairs older workspace expiry records.
-- Allowed root users to delete the default workspace. If no workspace named Default exists, the app now lands on the workspace selector.
+- Allowed super-admin users to delete the default workspace. If no workspace named Default exists, the app now lands on the workspace selector.
 - Hid inaccessible explicit workspaces and unavailable delete actions from users without permission.
-- Added password-protected workspace access management so owners, admins, and root users can change the workspace password.
+- Added password-protected workspace access management so owners, admins, and super-admin users can change the workspace password.
 - Prevented duplicate workspace names after normalisation and duplicate usernames after normalisation.
 - Added login request rate limiting on top of wrong-password lockout to reduce brute-force and request-flood pressure on the login endpoint.
-- Restricted workspace password override to the logged-in admin/root user's own password; normal users can no longer unlock a workspace with someone else's privileged password.
+- Restricted workspace password override to the logged-in admin/super-admin user's own password; normal users can no longer unlock a workspace with someone else's privileged password.
 - Added versioned CSS and JavaScript asset URLs so upgraded deployments do not keep using stale login/workspace styling from the browser cache.
-- Migrated legacy app access-code and API-key hashes into the first `admin` root user during 1.0.x upgrades, including repair for installs that already bootstrapped `admin/password`.
+- Migrated legacy app access-code and API-key hashes into the first `admin` super-admin user during 1.0.x upgrades, including repair for installs that already bootstrapped `admin/password`.
 - Added optional per-user authenticator app login codes with dependency-free TOTP and QR-code setup, including shorter Google Authenticator-compatible QR payloads, stable pending setup secrets, setup-code verification, duplicate-submit protection, request-body draining for browser keep-alive requests, visible server time, and wider clock-skew tolerance.
 - Updated the footer, workspace selector layout, mobile access controls, and password visibility controls.
 - Split the HTTP route handler into focused route mixins to make routing, pages, management actions, uploads, static serving, and WebSockets easier to maintain.

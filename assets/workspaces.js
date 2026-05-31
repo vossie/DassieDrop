@@ -180,6 +180,14 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     const actions = document.createElement("div");
     actions.className = "file-card-actions";
 
+    if (workspace.can_manage_access) {
+      const accessLink = document.createElement("a");
+      accessLink.className = "workspace-access-list-link";
+      accessLink.href = `/workspaces/access?workspace=${encodeURIComponent(workspace.slug || workspace.id)}`;
+      accessLink.textContent = workspace.access_mode === "password" ? "Change Password" : "Manage Access";
+      actions.appendChild(accessLink);
+    }
+
     const enterBtn = document.createElement("button");
     enterBtn.type = "button";
     enterBtn.textContent = workspace.id === currentWorkspaceId ? "Open" : "Enter";
@@ -250,8 +258,8 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       authLabel.className = "meta workspace-auth-label";
       authLabel.textContent =
         actionToRender === "delete"
-          ? "Enter the workspace password or a root/admin user password to delete this workspace."
-          : "Enter the workspace password or a root/admin user password to open this workspace.";
+          ? "Enter the workspace password to delete this workspace."
+          : "Enter the workspace password to open this workspace.";
 
       const authInput = document.createElement("input");
       authInput.type = "password";

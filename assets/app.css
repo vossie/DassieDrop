@@ -939,6 +939,15 @@ input[type="file"] {
   flex-wrap: wrap;
   margin-left: auto;
 }
+.workspace-access-list-link {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.workspace-access-list-link:hover,
+.workspace-access-list-link:focus-visible {
+  text-decoration: underline;
+}
 .workspace-panel {
   max-width: 920px;
 }

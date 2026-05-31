@@ -75,7 +75,7 @@ No pairing. No cloud dependency.
   API-ready with `curl` support.
 
 - **User-managed access**
-  Built-in local users with root, admin, and user roles plus per-user API keys.
+  Built-in local users with super-admin, admin, and user roles plus per-user API keys.
 
 ---
 
@@ -195,7 +195,7 @@ Optional expiry policies for uploaded files and text.
 
 User-based login, per-user API keys, roles, and HTTPS support.
 
-On a new installation DassieDrop creates a root user:
+On a new installation DassieDrop creates a super-admin user:
 
 ```text
 username: admin

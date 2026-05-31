@@ -113,7 +113,8 @@ def user_has_role(handler: BaseHTTPRequestHandler, roles: set[str]) -> bool:
     user = current_user(handler)
     if user is None:
         return False
-    return storage.normalize_user_role(user.get("role")) in roles
+    normalized_roles = {storage.normalize_user_role(role) for role in roles}
+    return storage.normalize_user_role(user.get("role")) in normalized_roles
 
 
 def create_authorized_session(

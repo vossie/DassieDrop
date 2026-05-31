@@ -1,11 +1,7 @@
-import logging
 import urllib.parse
 from http import HTTPStatus
 
 from . import auth, config, state, storage
-
-
-logger = logging.getLogger("dassiedrop.http")
 
 
 class ManagementRoutesMixin:
@@ -29,7 +25,14 @@ class ManagementRoutesMixin:
         ]
         return {
             "workspaces": [
-                {**workspace, "can_delete": self.user_can_delete_workspace(workspace)}
+                {
+                    **workspace,
+                    "can_delete": self.user_can_delete_workspace(workspace),
+                    "can_manage_access": (
+                        storage.workspace_access_mode(workspace) in {"password", "explicit"}
+                        and self.user_can_manage_workspace(workspace)
+                    ),
+                }
                 for workspace in workspaces
             ],
             "current_workspace_id": self.current_session_workspace_id(),
@@ -41,13 +44,13 @@ class ManagementRoutesMixin:
 
     def user_can_manage_workspace(self, workspace: dict) -> bool:
         current_user_id = self.current_user_id()
-        if auth.user_has_role(self, {"root", "admin"}):
+        if auth.user_has_role(self, {"super-admin", "admin"}):
             return True
         return bool(current_user_id) and str(workspace.get("owner_user_id") or "") == current_user_id
 
     def user_can_delete_workspace(self, workspace: dict) -> bool:
         if workspace.get("id") == config.DEFAULT_WORKSPACE_ID:
-            return auth.user_has_role(self, {"root"})
+            return auth.user_has_role(self, {"super-admin"})
         if not auth.access_code_is_configured():
             return True
         return self.user_can_manage_workspace(workspace)
@@ -55,7 +58,7 @@ class ManagementRoutesMixin:
     def users_payload(self) -> dict:
         current_user = auth.current_user(self)
         current_user_id = str((current_user or {}).get("id") or "")
-        can_manage_users = auth.user_has_role(self, {"root"})
+        can_manage_users = auth.user_has_role(self, {"super-admin"})
         users = storage.list_users() if can_manage_users else []
         if not can_manage_users and current_user_id:
             user = storage.get_user(current_user_id)
@@ -68,16 +71,16 @@ class ManagementRoutesMixin:
         }
 
     def require_root_user(self, html_response: bool = False) -> bool:
-        if not auth.user_has_role(self, {"root"}):
+        if not auth.user_has_role(self, {"super-admin"}):
             if html_response:
-                self.send_error(HTTPStatus.FORBIDDEN, "Root user required")
+                self.send_error(HTTPStatus.FORBIDDEN, "Super-admin user required")
             else:
-                self.send_error(HTTPStatus.FORBIDDEN, "Root user required")
+                self.send_error(HTTPStatus.FORBIDDEN, "Super-admin user required")
             return False
         return True
 
     def user_can_access_edit_user_page(self) -> bool:
-        if auth.user_has_role(self, {"root"}):
+        if auth.user_has_role(self, {"super-admin"}):
             return True
         parsed = urllib.parse.urlparse(self.path)
         requested_user_id = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
@@ -233,7 +236,7 @@ class ManagementRoutesMixin:
         payload = self.parse_json_body()
         if payload is None:
             return
-        if not auth.user_has_role(self, {"root"}):
+        if not auth.user_has_role(self, {"super-admin"}):
             current_user = auth.current_user(self)
             if current_user is None or user_id != current_user.get("id"):
                 self.send_error(HTTPStatus.FORBIDDEN, "User account required")
@@ -299,7 +302,7 @@ class ManagementRoutesMixin:
             return False
         if user_id == current_user.get("id"):
             return True
-        return allow_root and auth.user_has_role(self, {"root"})
+        return allow_root and auth.user_has_role(self, {"super-admin"})
 
     def handle_user_totp_setup(self, user_id: str) -> None:
         if not self.user_can_manage_totp(user_id, allow_root=False):
@@ -443,7 +446,10 @@ class ManagementRoutesMixin:
         self.send_json({"workspace": workspace, **self.workspace_list_payload()})
 
     def handle_workspace_access_payload(self) -> None:
-        workspace_id = self.current_session_workspace_id()
+        _, session = auth.get_session(self)
+        workspace_id = None
+        if session is not None:
+            workspace_id = session.get("access_workspace_id") or session.get("workspace_id")
         workspace = storage.get_workspace(str(workspace_id or ""))
         if workspace is None:
             self.send_error(HTTPStatus.CONFLICT, "Workspace not selected")
@@ -501,13 +507,6 @@ class ManagementRoutesMixin:
                 auth.record_throttle_failure(self, "workspace-delete", workspace_id)
             self.send_error(status, message)
             return
-        if workspace is not None and storage.workspace_delete_uses_super_password(password, current_user_id):
-            logger.warning(
-                "Workspace deleted with privileged user password: workspace_id=%s workspace_name=%s client_ip=%s",
-                workspace_id,
-                workspace.get("name", ""),
-                self.client_address[0],
-            )
         auth.clear_throttle_failures(self, "workspace-delete", workspace_id)
         self.send_json(self.workspace_list_payload())
 
@@ -525,10 +524,9 @@ class ManagementRoutesMixin:
             if not allowed:
                 self.send_throttled("Too many workspace password attempts", retry_after)
                 return None
-            if workspace.get("password_hash") and not storage.workspace_password_or_user_override_is_valid(
+            if workspace.get("password_hash") and not storage.workspace_password_is_valid(
                 workspace,
-                auth.requested_workspace_password(self),
-                user_id=self.current_user_id(),
+                auth.requested_workspace_password(self).strip(),
             ):
                 auth.record_throttle_failure(self, "workspace-context", workspace["id"])
                 self.send_error(HTTPStatus.FORBIDDEN, "Wrong workspace password")

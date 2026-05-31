@@ -7,8 +7,10 @@ const editUserApiKey = document.getElementById("editUserApiKey");
 const editUserRole = document.getElementById("editUserRole");
 const editUserRoleField = document.getElementById("editUserRoleField");
 const authenticatorField = document.getElementById("authenticatorField");
-const setupTotpBtn = document.getElementById("setupTotpBtn");
-const disableTotpBtn = document.getElementById("disableTotpBtn");
+const authenticatorActions = document.getElementById("authenticatorActions");
+let authenticatorHeading = null;
+let setupTotpBtn = null;
+let disableTotpBtn = null;
 const totpSetupPanel = document.getElementById("totpSetupPanel");
 const totpQrCode = document.getElementById("totpQrCode");
 const totpServerTime = document.getElementById("totpServerTime");
@@ -22,6 +24,100 @@ const userId = new URLSearchParams(window.location.search).get("id") || "";
 let canManageUsers = false;
 let loadedUser = null;
 let currentUserId = "";
+
+function removeAuthenticatorHeading() {
+  if (authenticatorHeading) {
+    authenticatorHeading.remove();
+    authenticatorHeading = null;
+  }
+}
+
+function ensureAuthenticatorHeading() {
+  if (authenticatorHeading) {
+    return authenticatorHeading;
+  }
+  authenticatorHeading = document.createElement("span");
+  authenticatorHeading.id = "authenticatorHeading";
+  authenticatorHeading.className = "settings-label-row";
+
+  const label = document.createElement("span");
+  label.textContent = "Authenticator app";
+  const help = document.createElement("span");
+  help.className = "settings-help";
+  help.tabIndex = 0;
+  help.dataset.tooltip = "Optional six-digit TOTP code from an authenticator app. Setup stores a local secret for this user.";
+  help.textContent = "?";
+
+  authenticatorHeading.appendChild(label);
+  authenticatorHeading.appendChild(help);
+  authenticatorField.insertBefore(authenticatorHeading, authenticatorActions);
+  return authenticatorHeading;
+}
+
+function removeSetupTotpButton() {
+  if (setupTotpBtn) {
+    setupTotpBtn.remove();
+    setupTotpBtn = null;
+  }
+}
+
+function ensureSetupTotpButton() {
+  if (setupTotpBtn) {
+    return setupTotpBtn;
+  }
+  setupTotpBtn = document.createElement("button");
+  setupTotpBtn.id = "setupTotpBtn";
+  setupTotpBtn.type = "button";
+  setupTotpBtn.className = "secondary";
+  setupTotpBtn.addEventListener("click", setupTotp);
+  authenticatorActions.insertBefore(setupTotpBtn, disableTotpBtn || null);
+  return setupTotpBtn;
+}
+
+function removeDisableTotpButton() {
+  if (disableTotpBtn) {
+    disableTotpBtn.remove();
+    disableTotpBtn = null;
+  }
+}
+
+function ensureDisableTotpButton() {
+  if (disableTotpBtn) {
+    return disableTotpBtn;
+  }
+  disableTotpBtn = document.createElement("button");
+  disableTotpBtn.id = "disableTotpBtn";
+  disableTotpBtn.type = "button";
+  disableTotpBtn.className = "danger";
+  disableTotpBtn.textContent = "Disable";
+  disableTotpBtn.addEventListener("click", disableTotp);
+  authenticatorActions.appendChild(disableTotpBtn);
+  return disableTotpBtn;
+}
+
+function renderAuthenticatorControls(user) {
+  const isOwnUser = userId === currentUserId;
+  const totpEnabled = Boolean(user && user.totp_enabled);
+  const canSetUpTotp = isOwnUser && !totpEnabled;
+  const canDisableTotp = totpEnabled && (isOwnUser || canManageUsers);
+  if (canSetUpTotp) {
+    ensureSetupTotpButton().textContent = totpEnabled ? "Reset Authenticator" : "Set Up";
+  } else {
+    removeSetupTotpButton();
+  }
+  if (canDisableTotp) {
+    ensureDisableTotpButton().disabled = false;
+  } else {
+    removeDisableTotpButton();
+  }
+  const hideAuthenticator = !canSetUpTotp && !canDisableTotp;
+  authenticatorField.hidden = hideAuthenticator;
+  if (hideAuthenticator) {
+    removeAuthenticatorHeading();
+  } else {
+    ensureAuthenticatorHeading();
+  }
+}
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -57,13 +153,7 @@ async function loadUser() {
     editUserRole.disabled = !canManageUsers;
     editUserNameField.classList.toggle("user-self-hidden", !canManageUsers);
     editUserRoleField.classList.toggle("user-self-hidden", !canManageUsers);
-    const isOwnUser = userId === currentUserId;
-    const canDisableTotp = Boolean(user.totp_enabled) && (isOwnUser || canManageUsers);
-    setupTotpBtn.hidden = !isOwnUser;
-    disableTotpBtn.hidden = !canDisableTotp;
-    disableTotpBtn.disabled = !canDisableTotp;
-    authenticatorField.hidden = !isOwnUser && !canDisableTotp;
-    setupTotpBtn.textContent = user.totp_enabled ? "Reset Authenticator" : "Set Up";
+    renderAuthenticatorControls(user);
   } catch (error) {
     editUserStatus.textContent = "Could not load user.";
     saveEditUserBtn.disabled = true;
@@ -129,8 +219,7 @@ async function confirmTotp() {
     const payload = await response.json();
     loadedUser = payload.user || loadedUser;
     totpSetupPanel.hidden = true;
-    disableTotpBtn.disabled = false;
-    setupTotpBtn.textContent = "Reset Authenticator";
+    renderAuthenticatorControls(loadedUser);
     editUserStatus.textContent = "Authenticator enabled.";
   } catch (error) {
     confirmTotpBtn.disabled = false;
@@ -161,8 +250,7 @@ async function disableTotp() {
     const payload = await response.json();
     loadedUser = payload.user || loadedUser;
     totpSetupPanel.hidden = true;
-    disableTotpBtn.disabled = true;
-    setupTotpBtn.textContent = "Set Up";
+    renderAuthenticatorControls(loadedUser);
     editUserStatus.textContent = "Authenticator disabled.";
   } catch (error) {
     editUserStatus.textContent = "Could not disable authenticator.";
@@ -205,9 +293,7 @@ async function saveEditUser() {
 }
 
 saveEditUserBtn.addEventListener("click", saveEditUser);
-setupTotpBtn.addEventListener("click", setupTotp);
 confirmTotpBtn.addEventListener("click", confirmTotp);
-disableTotpBtn.addEventListener("click", disableTotp);
 editUserName.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     saveEditUser();

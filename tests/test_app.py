@@ -6,6 +6,7 @@ import os
 import socket
 import struct
 import subprocess
+import sys
 import threading
 import time
 import unittest
@@ -475,7 +476,7 @@ class AppStateTests(unittest.TestCase):
         index_payload = app.read_shelved_payload()
         self.assertEqual(index_payload["workspaces"][0]["files"], [])
 
-    def test_can_create_enter_and_delete_workspace_with_super_password(self) -> None:
+    def test_can_create_enter_and_delete_workspace_with_workspace_password_only(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
 
@@ -493,11 +494,20 @@ class AppStateTests(unittest.TestCase):
             password="override",
             user_id=admin["id"],
         )
+        self.assertFalse(deleted)
+        self.assertEqual(delete_message, "Wrong workspace password")
+        self.assertIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+        deleted, delete_message = app.delete_workspace(
+            workspace["id"],
+            password="vault",
+            user_id=admin["id"],
+        )
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
 
-    def test_can_enter_workspace_with_admin_user_password(self) -> None:
+    def test_cannot_enter_workspace_with_admin_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
         admin = storage.set_user("Admin", password="override", api_key="override-api", role="admin")
@@ -509,13 +519,13 @@ class AppStateTests(unittest.TestCase):
             user_id=admin["id"],
         )
 
-        self.assertTrue(ok)
-        self.assertEqual(message, "")
+        self.assertFalse(ok)
+        self.assertEqual(message, "Wrong workspace password")
 
-    def test_can_enter_workspace_with_root_user_password(self) -> None:
+    def test_cannot_enter_workspace_with_super_admin_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
-        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
+        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="super-admin")
 
         ok, message = app.enter_workspace(
             session_id,
@@ -524,12 +534,12 @@ class AppStateTests(unittest.TestCase):
             user_id=root["id"],
         )
 
-        self.assertTrue(ok)
-        self.assertEqual(message, "")
+        self.assertFalse(ok)
+        self.assertEqual(message, "Wrong workspace password")
 
-    def test_can_delete_workspace_with_root_user_password(self) -> None:
+    def test_cannot_delete_workspace_with_super_admin_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
-        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
+        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="super-admin")
 
         deleted, delete_message = app.delete_workspace(
             workspace["id"],
@@ -537,14 +547,24 @@ class AppStateTests(unittest.TestCase):
             user_id=root["id"],
         )
 
+        self.assertFalse(deleted)
+        self.assertEqual(delete_message, "Wrong workspace password")
+        self.assertIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+        deleted, delete_message = app.delete_workspace(
+            workspace["id"],
+            password="vault",
+            user_id=root["id"],
+        )
+
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
 
-    def test_privileged_workspace_override_requires_matching_user(self) -> None:
+    def test_privileged_user_password_never_overrides_workspace_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
-        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
+        root = storage.set_user("Root", password="stored-override", api_key="root-api", role="super-admin")
         user = storage.set_user("Alice", password="alice-pass", api_key="alice-api", role="user")
 
         ok, message = app.enter_workspace(
@@ -569,8 +589,8 @@ class AppStateTests(unittest.TestCase):
             password="stored-override",
             user_id=root["id"],
         )
-        self.assertTrue(deleted)
-        self.assertEqual(delete_message, "")
+        self.assertFalse(deleted)
+        self.assertEqual(delete_message, "Wrong workspace password")
 
     def test_default_workspace_can_be_deleted_and_is_not_recreated_by_listing(self) -> None:
         self.assertIn(app.DEFAULT_WORKSPACE_ID, {item["id"] for item in app.list_workspaces()})
@@ -661,6 +681,11 @@ class AppStateTests(unittest.TestCase):
 
         self.assertEqual(user["role"], "user")
 
+    def test_legacy_root_role_is_normalized_to_super_admin(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="root")
+
+        self.assertEqual(user["role"], "super-admin")
+
     def test_startup_bootstraps_default_root_user(self) -> None:
         app.load_persisted_workspaces()
 
@@ -668,7 +693,7 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(len(users), 1)
         user = next(iter(users.values()))
         self.assertEqual(user["username"], "admin")
-        self.assertEqual(user["role"], "root")
+        self.assertEqual(user["role"], "super-admin")
         self.assertTrue(app.verify_password("password", user["password_hash"]))
         self.assertTrue(app.verify_password("password", user["api_key_hash"]))
 
@@ -690,7 +715,7 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(len(users), 1)
         user = next(iter(users.values()))
         self.assertEqual(user["username"], "admin")
-        self.assertEqual(user["role"], "root")
+        self.assertEqual(user["role"], "super-admin")
         self.assertTrue(app.verify_password("old-access-code", user["password_hash"]))
         self.assertTrue(app.verify_password("old-api-key", user["api_key_hash"]))
         self.assertFalse(app.verify_password("password", user["password_hash"]))
@@ -709,7 +734,7 @@ class AppStateTests(unittest.TestCase):
                 "legacy-admin": {
                     "id": "legacy-admin",
                     "username": "admin",
-                    "role": "root",
+                    "role": "super-admin",
                     "password_hash": storage.hash_password("password"),
                     "api_key_hash": storage.hash_password("password"),
                     "created_at": now,
@@ -728,7 +753,7 @@ class AppStateTests(unittest.TestCase):
         self.assertFalse(app.verify_password("password", user["password_hash"]))
 
     def test_startup_does_not_bootstrap_when_root_user_exists(self) -> None:
-        existing = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
+        existing = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="super-admin")
 
         app.load_persisted_workspaces()
 
@@ -738,7 +763,7 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(users[existing["id"]]["username"], "Rooty")
 
     def test_cannot_demote_or_delete_last_root_user(self) -> None:
-        root = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
+        root = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="super-admin")
 
         with self.assertRaises(ValueError):
             storage.update_user(root["id"], "Rooty", role="admin")
@@ -747,16 +772,16 @@ class AppStateTests(unittest.TestCase):
 
         users = storage.read_shelved_users()
         self.assertEqual(len(users), 1)
-        self.assertEqual(users[root["id"]]["role"], "root")
+        self.assertEqual(users[root["id"]]["role"], "super-admin")
 
     def test_can_demote_or_delete_root_when_another_root_exists(self) -> None:
-        first = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
-        second = storage.set_user("Backup", password="backup-pass", api_key="backup-api", role="root")
+        first = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="super-admin")
+        second = storage.set_user("Backup", password="backup-pass", api_key="backup-api", role="super-admin")
 
         updated = storage.update_user(first["id"], "Rooty", role="admin")
 
         self.assertEqual(updated["role"], "admin")
-        storage.update_user(first["id"], "Rooty", role="root")
+        storage.update_user(first["id"], "Rooty", role="super-admin")
         deleted = storage.delete_user(first["id"])
         self.assertTrue(deleted)
 
@@ -845,7 +870,7 @@ class HttpServerTests(unittest.TestCase):
                 "admin",
                 password=access_code,
                 api_key=api_key or access_code,
-                role="root",
+                role="super-admin",
             )
         app.start_background_tasks()
         self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.AppHandler)
@@ -871,7 +896,7 @@ class HttpServerTests(unittest.TestCase):
         return result
 
     def root_cookie(self, username: str = "admin", password: str = "password") -> str:
-        storage.set_user(username, password=password, api_key="root-api", role="root")
+        storage.set_user(username, password=password, api_key="root-api", role="super-admin")
         login = self.request(
             "POST",
             "/login",
@@ -1473,6 +1498,41 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(self.select_workspace(outsider_cookie, workspace["id"], password="old-vault")["status"], 403)
         self.assertEqual(self.select_workspace(outsider_cookie, workspace["id"], password="new-vault")["status"], 200)
 
+    def test_workspace_manager_can_open_access_page_from_list_without_password_override(self) -> None:
+        self.start_server()
+        admin_cookie = self.root_cookie("Admin", "admin-pass")
+        workspace = app.create_workspace("Password Room", password="vault", access_mode="password")
+
+        list_response = self.request("GET", "/api/workspaces", headers={"Cookie": admin_cookie})
+        self.assertEqual(list_response["status"], 200)
+        listed = next(
+            item for item in json.loads(list_response["body"])["workspaces"] if item["id"] == workspace["id"]
+        )
+        self.assertTrue(listed["can_manage_access"])
+
+        access_page = self.request(
+            "GET",
+            f"/workspaces/access?workspace={workspace['slug']}",
+            headers={"Cookie": admin_cookie},
+        )
+        self.assertEqual(access_page["status"], 200)
+        self.assertIn('id="workspacePasswordPanel"', access_page["text"])
+
+        access_payload = self.request("GET", "/api/workspaces/access", headers={"Cookie": admin_cookie})
+        self.assertEqual(access_payload["status"], 200)
+        self.assertEqual(json.loads(access_payload["body"])["workspace"]["id"], workspace["id"])
+
+        state_response = self.request("GET", "/api/state", headers={"Cookie": admin_cookie})
+        if state_response["status"] == 200:
+            self.assertNotEqual(json.loads(state_response["body"])["workspace"]["id"], workspace["id"])
+        else:
+            self.assertEqual(state_response["status"], 409)
+            self.assertIn("Workspace not selected", state_response["text"])
+
+        blocked_enter = self.select_workspace(admin_cookie, workspace["id"], "admin-pass")
+        self.assertEqual(blocked_enter["status"], 403)
+        self.assertIn("Wrong workspace password", blocked_enter["text"])
+
     def test_workspace_creation_endpoint_accepts_custom_expiry(self) -> None:
         self.start_server()
 
@@ -1565,7 +1625,7 @@ class HttpServerTests(unittest.TestCase):
 
     def test_user_password_is_used_for_login(self) -> None:
         self.start_server()
-        storage.set_user("admin", password="stored-pass", api_key="stored-api", role="root")
+        storage.set_user("admin", password="stored-pass", api_key="stored-api", role="super-admin")
 
         blocked = self.request("GET", "/api/state")
         self.assertEqual(blocked["status"], 401)
@@ -1581,7 +1641,7 @@ class HttpServerTests(unittest.TestCase):
 
     def test_user_login_requires_authenticator_code_when_enabled(self) -> None:
         self.start_server()
-        user = storage.set_user("admin", password="stored-pass", api_key="stored-api", role="root")
+        user = storage.set_user("admin", password="stored-pass", api_key="stored-api", role="super-admin")
         setup = storage.begin_user_totp_setup(user["id"])
         code = storage.totp_code(setup["secret"], self.fake_now())
         storage.confirm_user_totp_setup(user["id"], code)
@@ -1791,7 +1851,7 @@ class HttpServerTests(unittest.TestCase):
                     "username": "alice",
                     "password": "secret-pass",
                     "api_key": "secret-api",
-                    "role": "root",
+                    "role": "super-admin",
                 }
             ).encode("utf-8"),
             headers={
@@ -1804,7 +1864,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(response["status"], 200)
         payload = json.loads(response["body"])
         self.assertEqual(payload["user"]["username"], "alice")
-        self.assertEqual(payload["user"]["role"], "root")
+        self.assertEqual(payload["user"]["role"], "super-admin")
         self.assertTrue(payload["user"]["password_configured"])
         self.assertTrue(payload["user"]["api_key_configured"])
         self.assertNotIn("secret-pass", response["text"])
@@ -1842,7 +1902,7 @@ class HttpServerTests(unittest.TestCase):
                     "username": "backup",
                     "password": "backup-pass",
                     "api_key": "backup-api",
-                    "role": "root",
+                    "role": "super-admin",
                 }
             ).encode("utf-8"),
             headers={
@@ -1910,12 +1970,12 @@ class HttpServerTests(unittest.TestCase):
         remaining_users = json.loads(delete_response["body"])["users"]
         self.assertEqual(len(remaining_users), 2)
         remaining_by_username = {user["username"]: user for user in remaining_users}
-        self.assertEqual(remaining_by_username["admin"]["role"], "root")
-        self.assertEqual(remaining_by_username["backup"]["role"], "root")
+        self.assertEqual(remaining_by_username["admin"]["role"], "super-admin")
+        self.assertEqual(remaining_by_username["backup"]["role"], "super-admin")
 
     def test_non_root_user_only_manages_own_secrets(self) -> None:
         self.start_server()
-        root = storage.set_user("root", password="root-pass", api_key="root-api", role="root")
+        root = storage.set_user("root", password="root-pass", api_key="root-api", role="super-admin")
         user = storage.set_user("alice", password="alice-pass", api_key="alice-api", role="user")
         login = self.request(
             "POST",
@@ -1942,7 +2002,7 @@ class HttpServerTests(unittest.TestCase):
         create_response = self.request(
             "POST",
             "/api/users",
-            body=json.dumps({"username": "bob", "password": "bob-pass", "role": "root"}).encode("utf-8"),
+            body=json.dumps({"username": "bob", "password": "bob-pass", "role": "super-admin"}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": cookie,
@@ -1982,7 +2042,7 @@ class HttpServerTests(unittest.TestCase):
             body=json.dumps(
                 {
                     "username": "alice-root",
-                    "role": "root",
+                    "role": "super-admin",
                     "password": "new-alice-pass",
                     "api_key": "new-alice-api",
                 }
@@ -2003,8 +2063,8 @@ class HttpServerTests(unittest.TestCase):
 
     def test_root_user_can_change_own_username_and_role_when_another_root_remains(self) -> None:
         self.start_server()
-        root = storage.set_user("root", password="root-pass", api_key="root-api", role="root")
-        storage.set_user("backup", password="backup-pass", api_key="backup-api", role="root")
+        root = storage.set_user("root", password="root-pass", api_key="root-api", role="super-admin")
+        storage.set_user("backup", password="backup-pass", api_key="backup-api", role="super-admin")
         login = self.request(
             "POST",
             "/login",
@@ -2222,7 +2282,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(third["status"], 429)
         self.assertEqual(third["headers"]["Retry-After"], "60")
 
-    def test_workspace_delete_logs_privileged_user_password_usage(self) -> None:
+    def test_workspace_delete_rejects_privileged_user_password(self) -> None:
         self.start_server()
         cookie = self.root_cookie(password="override")
         workspace = app.create_workspace("Secure", password="vault")
@@ -2231,25 +2291,31 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(workspace_page["status"], 200)
         token = workspace_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
-        with self.assertLogs("dassiedrop.http", level="WARNING") as captured:
-            response = self.request(
-                "DELETE",
-                f"/api/workspaces/{workspace['id']}",
-                body=json.dumps({"password": "override"}).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "Cookie": cookie,
-                    "X-CSRF-Token": token,
-                },
-            )
-
-        self.assertEqual(response["status"], 200)
-        self.assertTrue(
-            any(
-                "Workspace deleted with privileged user password" in message and workspace["id"] in message
-                for message in captured.output
-            )
+        response = self.request(
+            "DELETE",
+            f"/api/workspaces/{workspace['id']}",
+            body=json.dumps({"password": "override"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
         )
+
+        self.assertEqual(response["status"], 403)
+        self.assertIn("Wrong workspace password", response["text"])
+
+        response = self.request(
+            "DELETE",
+            f"/api/workspaces/{workspace['id']}",
+            body=json.dumps({"password": "vault"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(response["status"], 200)
 
     def test_delete_flow_removes_entry_from_follow_up_requests(self) -> None:
         self.start_server()
@@ -2878,9 +2944,9 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(allowed_preview["status"], 200)
         self.assertEqual(allowed_preview["body"], b"secret")
 
-    def test_workspace_password_override_requires_logged_in_privileged_user(self) -> None:
+    def test_workspace_unlock_requires_workspace_password_for_privileged_user(self) -> None:
         self.start_server()
-        root = storage.set_user("Root", password="root-pass", api_key="root-api", role="root")
+        root = storage.set_user("Root", password="root-pass", api_key="root-api", role="super-admin")
         user_cookie = self.user_cookie("alice", "alice-pass")
         workspace = app.create_workspace("Secure Space", password="vault")
         token = self.csrf_token(user_cookie)
@@ -2917,8 +2983,9 @@ class HttpServerTests(unittest.TestCase):
                 "X-CSRF-Token": root_token,
             },
         )
-        self.assertEqual(allowed_enter["status"], 200)
-        self.assertEqual(root["role"], "root")
+        self.assertEqual(allowed_enter["status"], 403)
+        self.assertIn("Wrong workspace password", allowed_enter["text"])
+        self.assertEqual(root["role"], "super-admin")
 
     def test_login_does_not_auto_open_password_protected_default_workspace(self) -> None:
         self.start_server()
@@ -2942,7 +3009,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(blocked_enter["status"], 403)
         self.assertIn("Wrong workspace password", blocked_enter["text"])
 
-    def test_privileged_user_can_enter_protected_default_with_own_password(self) -> None:
+    def test_privileged_user_cannot_enter_protected_default_with_own_password(self) -> None:
         self.start_server()
         storage.set_user("admin", password="admin-pass", api_key="admin-api", role="admin")
         storage.set_workspace_password(app.DEFAULT_WORKSPACE_ID, "vault")
@@ -2957,11 +3024,15 @@ class HttpServerTests(unittest.TestCase):
         cookie = login["headers"]["Set-Cookie"].split(";", 1)[0]
 
         enter_response = self.select_workspace(cookie, app.DEFAULT_WORKSPACE_ID, "admin-pass")
+        self.assertEqual(enter_response["status"], 403)
+        self.assertIn("Wrong workspace password", enter_response["text"])
+
+        enter_response = self.select_workspace(cookie, app.DEFAULT_WORKSPACE_ID, "vault")
         self.assertEqual(enter_response["status"], 200)
         state_response = self.request("GET", "/api/state", headers={"Cookie": cookie})
         self.assertEqual(state_response["status"], 200)
 
-    def test_direct_file_workspace_override_requires_matching_privileged_user(self) -> None:
+    def test_direct_file_requires_workspace_password_for_privileged_user(self) -> None:
         self.start_server()
         workspace = app.create_workspace("Secure Space", password="vault")
         upload_response = self.upload_request(
@@ -2972,7 +3043,7 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(upload_response["status"], 200)
         file_entry = json.loads(upload_response["body"])["files"][0]
-        storage.set_user("Root", password="root-pass", api_key="root-api", role="root")
+        storage.set_user("Root", password="root-pass", api_key="root-api", role="super-admin")
         user_cookie = self.user_cookie("alice", "alice-pass")
 
         blocked_download = self.request(
@@ -2984,10 +3055,18 @@ class HttpServerTests(unittest.TestCase):
         self.assertIn("Wrong workspace password", blocked_download["text"])
 
         admin_cookie = self.root_cookie("Admin", "admin-pass")
-        allowed_download = self.request(
+        blocked_admin_download = self.request(
             "GET",
             f"/download/{file_entry['id']}",
             headers={"Cookie": admin_cookie, "X-Workspace-Password": "admin-pass"},
+        )
+        self.assertEqual(blocked_admin_download["status"], 403)
+        self.assertIn("Wrong workspace password", blocked_admin_download["text"])
+
+        allowed_download = self.request(
+            "GET",
+            f"/download/{file_entry['id']}",
+            headers={"Cookie": admin_cookie, "X-Workspace-Password": "vault"},
         )
         self.assertEqual(allowed_download["status"], 200)
         self.assertEqual(allowed_download["body"], b"secret")
@@ -3659,6 +3738,145 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("--silent", install_doc)
         self.assertIn("UPDATE_CHECK_ENABLED", install_doc)
 
+    def test_reset_admin_password_script_migrates_legacy_root_role(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            upload_dir = Path(temp_dir) / "uploads"
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(REPO_ROOT),
+                "UPLOAD_DIR": str(upload_dir),
+            }
+            setup = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import shelve\n"
+                        "from dassiedrop import storage\n"
+                        "storage.ensure_upload_dir()\n"
+                        "with shelve.open(str(storage.uploads_index_path()), flag='n') as db:\n"
+                        "    db['users'] = {\n"
+                        "        'admin-id': {\n"
+                        "            'id': 'admin-id',\n"
+                        "            'username': 'admin',\n"
+                        "            'role': 'root',\n"
+                        "            'password_hash': storage.hash_password('old-pass'),\n"
+                        "            'api_key_hash': storage.hash_password('old-api'),\n"
+                        "            'totp_secret': None,\n"
+                        "            'totp_pending_secret': None,\n"
+                        "            'totp_pending_at': None,\n"
+                        "            'created_at': 1.0,\n"
+                        "            'updated_at': 1.0,\n"
+                        "        }\n"
+                        "    }\n"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(setup.returncode, 0, setup.stderr)
+
+            result = subprocess.run(
+                [sys.executable, "scripts/reset_admin_password.py", "new-pass"],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("migrated 1 legacy root role", result.stdout)
+
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from dassiedrop import storage;"
+                        "storage.load_persisted_files();"
+                        "users=storage.list_users();"
+                        "assert users[0]['role'] == 'super-admin', users;"
+                        "assert storage.authenticate_user('admin', 'new-pass') is not None"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(verify.returncode, 0, verify.stderr)
+
+    def test_reset_user_password_shell_script_sets_password_and_role(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            upload_dir = Path(temp_dir) / "uploads"
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(REPO_ROOT),
+                "UPLOAD_DIR": str(upload_dir),
+            }
+            setup = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from dassiedrop import storage;"
+                        "storage.ensure_upload_dir();"
+                        "storage.set_user('carel', password='old-pass', api_key='api', role='user')"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(setup.returncode, 0, setup.stderr)
+
+            result = subprocess.run(
+                ["bash", "scripts/reset-user-password.sh", "carel", "new-pass", "super-admin"],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("carel password reset; role super-admin", result.stdout)
+
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from dassiedrop import storage;"
+                        "storage.load_persisted_files();"
+                        "users=storage.list_users();"
+                        "assert users[0]['role'] == 'super-admin', users;"
+                        "assert storage.authenticate_user('carel', 'new-pass') is not None"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(verify.returncode, 0, verify.stderr)
+
+    def test_reset_user_password_shell_script_has_valid_bash_syntax(self) -> None:
+        result = subprocess.run(
+            ["bash", "-n", "scripts/reset-user-password.sh"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_app_can_enable_https_with_self_signed_cert_support(self) -> None:
         config_source = (REPO_ROOT / "dassiedrop" / "config.py").read_text(encoding="utf-8")
         http_support_source = (REPO_ROOT / "dassiedrop" / "http_support.py").read_text(encoding="utf-8")
@@ -3803,6 +4021,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("function confirmWorkspaceDelete(workspace)", script)
         self.assertIn("Are you sure you want to delete ${workspace.name}? All data will be lost.", script)
         self.assertIn('className = "workspace-auth-row"', script)
+        self.assertIn('className = "workspace-access-list-link"', script)
+        self.assertIn('accessLink.textContent = workspace.access_mode === "password" ? "Change Password" : "Manage Access"', script)
+        self.assertIn("workspace.can_manage_access", script)
+        self.assertIn("Enter the workspace password to open this workspace.", script)
+        self.assertNotIn("super-admin/admin user password", script)
         self.assertIn("if (workspace.can_delete) {", script)
         self.assertIn('li.addEventListener("click"', script)
         self.assertIn('if (event.target.closest("button, input, label, select, a")) {', script)
@@ -3846,10 +4069,12 @@ class ScriptTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("Authenticator app", template)
+        self.assertNotIn("Authenticator app", template)
         self.assertIn('id="authenticatorField" class="settings-field authenticator-field" hidden', template)
-        self.assertIn('id="setupTotpBtn" type="button" class="secondary" hidden', template)
-        self.assertIn('id="disableTotpBtn" type="button" class="danger" hidden', template)
+        self.assertNotIn('id="authenticatorHeading"', template)
+        self.assertIn('id="authenticatorActions" class="authenticator-actions"', template)
+        self.assertNotIn('id="setupTotpBtn"', template)
+        self.assertNotIn('id="disableTotpBtn"', template)
         self.assertIn('id="totpQrCode"', template)
         self.assertIn('id="totpServerTime"', template)
         self.assertNotIn('id="totpServerCode"', template)
@@ -3859,14 +4084,34 @@ class ScriptTests(unittest.TestCase):
         self.assertNotIn("totpServerCode.textContent", script)
         self.assertIn("Users must set up their own authenticator app.", script)
         self.assertIn('id="authenticatorField"', template)
+        self.assertIn("function renderAuthenticatorControls(user)", script)
+        self.assertIn("function ensureSetupTotpButton()", script)
+        self.assertIn("function ensureDisableTotpButton()", script)
+        self.assertIn("function ensureAuthenticatorHeading()", script)
+        self.assertIn("const hideAuthenticator = !canSetUpTotp && !canDisableTotp", script)
+        self.assertIn('label.textContent = "Authenticator app"', script)
+        self.assertIn("removeAuthenticatorHeading()", script)
+        self.assertIn('setupTotpBtn.id = "setupTotpBtn"', script)
+        self.assertIn('disableTotpBtn.id = "disableTotpBtn"', script)
         self.assertIn("const isOwnUser = userId === currentUserId", script)
-        self.assertIn("setupTotpBtn.hidden = !isOwnUser", script)
-        self.assertIn("disableTotpBtn.hidden = !canDisableTotp", script)
-        self.assertIn("authenticatorField.hidden = !isOwnUser && !canDisableTotp", script)
+        self.assertIn("const canSetUpTotp = isOwnUser && !totpEnabled", script)
+        self.assertIn("const canDisableTotp = totpEnabled && (isOwnUser || canManageUsers)", script)
+        self.assertIn("removeSetupTotpButton()", script)
+        self.assertIn("removeDisableTotpButton()", script)
+        self.assertIn("authenticatorField.hidden = hideAuthenticator", script)
+        self.assertNotIn("setupTotpBtn.hidden =", script)
+        self.assertNotIn("disableTotpBtn.hidden =", script)
+        self.assertEqual(script.count("authenticatorField.hidden ="), 1)
+        self.assertNotIn("authenticatorHeading.hidden =", script)
+        self.assertGreaterEqual(script.count("renderAuthenticatorControls("), 3)
         self.assertIn("/totp/setup", script)
         self.assertIn("/totp/confirm", script)
         self.assertIn(".totp-qr-code", stylesheet)
         self.assertIn(".totp-setup-panel", stylesheet)
+        self.assertIn(
+            "/assets/user-edit.js?v=__ASSET_VERSION__&cache=user-edit-authenticator-controls",
+            template,
+        )
 
     def test_text_panel_exposes_paste_and_send_control(self) -> None:
         index = (REPO_ROOT / "templates" / "index.html").read_text(

@@ -81,8 +81,16 @@ class PageRoutesMixin:
         if session is None or session_id is None:
             self.send_html(render_template("login.html"))
             return
-        workspace_id = session.get("workspace_id")
-        workspace = storage.get_workspace(str(workspace_id or ""))
+        parsed = urllib.parse.urlparse(self.path)
+        requested_workspace = urllib.parse.parse_qs(parsed.query).get("workspace", [""])[0]
+        if requested_workspace:
+            workspace = storage.get_workspace_by_selector(requested_workspace)
+            if workspace is None:
+                self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+                return
+        else:
+            workspace_id = session.get("workspace_id")
+            workspace = storage.get_workspace(str(workspace_id or ""))
         if workspace is None:
             self.redirect("/workspaces", cookie=cookie)
             return
@@ -92,6 +100,10 @@ class PageRoutesMixin:
         if not self.user_can_manage_workspace(workspace):
             self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
             return
+        with state.session_lock:
+            active_session = state.authorized_sessions.get(session_id)
+            if active_session is not None:
+                active_session["access_workspace_id"] = workspace["id"]
 
         access_mode = storage.workspace_access_mode(workspace)
         self.send_html(
@@ -209,10 +221,9 @@ class PageRoutesMixin:
             if not allowed:
                 self.send_throttled("Too many password attempts", retry_after)
                 return
-            if current_workspace_id != workspace["id"] and not storage.workspace_password_or_user_override_is_valid(
+            if current_workspace_id != workspace["id"] and not storage.workspace_password_is_valid(
                 workspace,
-                password,
-                user_id=self.current_user_id(),
+                password.strip(),
             ):
                 auth.record_throttle_failure(self, "workspace-shortcut", workspace["id"])
                 self.redirect(
