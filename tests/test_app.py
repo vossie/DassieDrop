@@ -13,7 +13,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import app
-from dassiedrop import config, state
+from dassiedrop import config, state, storage
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,6 +28,7 @@ def reset_app_state() -> None:
             "api_key_hash": None,
             "workspace_super_password_hash": None,
         }
+        state.shared_state["users"] = {}
         state.shared_state["update_check"] = {
             "checking": False,
             "last_checked_at": 0.0,
@@ -444,6 +445,25 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+    def test_user_records_are_hashed_and_persisted(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
+
+        self.assertEqual(user["username"], "Alice")
+        self.assertEqual(user["role"], "admin")
+        self.assertTrue(user["password_configured"])
+        self.assertTrue(user["api_key_configured"])
+        users = storage.read_shelved_users()
+        stored = users[user["id"]]
+        self.assertTrue(app.verify_password("secret-pass", stored["password_hash"]))
+        self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
+        self.assertNotIn("secret-pass", str(stored))
+        self.assertNotIn("secret-api", str(stored))
+
+    def test_user_roles_default_to_user(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="owner")
+
+        self.assertEqual(user["role"], "user")
 
     def test_share_payload_includes_workspace_metadata(self) -> None:
         workspace = app.create_workspace("Ops Desk")
@@ -939,6 +959,58 @@ class HttpServerTests(unittest.TestCase):
         )
 
         self.assertEqual(login["status"], 200)
+
+    def test_users_page_and_api_store_hashed_user_secrets(self) -> None:
+        self.start_server()
+
+        page = self.request("GET", "/users")
+        self.assertEqual(page["status"], 200)
+        self.assertIn("DassieDrop Users", page["text"])
+        cookie = page["headers"]["Set-Cookie"].split(";", 1)[0]
+        token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        response = self.request(
+            "POST",
+            "/api/users",
+            body=json.dumps(
+                {
+                    "username": "alice",
+                    "password": "secret-pass",
+                    "api_key": "secret-api",
+                    "role": "root",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(response["status"], 200)
+        payload = json.loads(response["body"])
+        self.assertEqual(payload["user"]["username"], "alice")
+        self.assertEqual(payload["user"]["role"], "root")
+        self.assertTrue(payload["user"]["password_configured"])
+        self.assertTrue(payload["user"]["api_key_configured"])
+        self.assertNotIn("secret-pass", response["text"])
+        self.assertNotIn("secret-api", response["text"])
+        users = storage.read_shelved_users()
+        stored = users[payload["user"]["id"]]
+        self.assertTrue(app.verify_password("secret-pass", stored["password_hash"]))
+        self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
+
+        delete_response = self.request(
+            "DELETE",
+            f"/api/users/{payload['user']['id']}",
+            headers={
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(delete_response["status"], 200)
+        self.assertEqual(json.loads(delete_response["body"])["users"], [])
 
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()

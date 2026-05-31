@@ -183,6 +183,7 @@ def reset_shared_state_locked(workspaces: dict | None = None) -> None:
     state.shared_state["reserved_upload_bytes"] = 0
     state.shared_state["reserved_upload_names"] = set()
     state.shared_state["app_settings"] = default_app_settings()
+    state.shared_state["users"] = default_users()
 
 
 def reserve_upload_capacity_locked(size: int) -> bool:
@@ -459,6 +460,8 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
 
 PERSISTED_PAYLOAD_KEY = "payload"
 PERSISTED_SETTINGS_KEY = "settings"
+PERSISTED_USERS_KEY = "users"
+USER_ROLES = ("root", "admin", "user")
 
 
 def default_app_settings() -> dict:
@@ -529,6 +532,149 @@ def serialize_app_settings(settings: dict | None = None) -> dict:
     }
 
 
+def normalize_user_role(role: object) -> str:
+    value = str(role or "").strip().lower()
+    return value if value in USER_ROLES else "user"
+
+
+def normalize_username(username: object) -> str:
+    value = str(username or "").strip()
+    value = re.sub(r"\s+", " ", value)
+    return value[:80]
+
+
+def make_user_id() -> str:
+    return secrets.token_hex(8)
+
+
+def default_users() -> dict:
+    return {}
+
+
+def normalize_users(users: object) -> dict:
+    if not isinstance(users, dict):
+        return default_users()
+    normalized = {}
+    seen_usernames = set()
+
+    def restore_ts(value: object) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return config.now_ts()
+
+    for user_id, user in users.items():
+        if not isinstance(user, dict):
+            continue
+        username = normalize_username(user.get("username"))
+        username_key = username.lower()
+        if not username or username_key in seen_usernames:
+            continue
+        seen_usernames.add(username_key)
+        normalized_id = str(user_id or "").strip() or make_user_id()
+        normalized[normalized_id] = {
+            "id": normalized_id,
+            "username": username,
+            "role": normalize_user_role(user.get("role")),
+            "password_hash": user.get("password_hash")
+            if isinstance(user.get("password_hash"), str)
+            else None,
+            "api_key_hash": user.get("api_key_hash")
+            if isinstance(user.get("api_key_hash"), str)
+            else None,
+            "created_at": restore_ts(user.get("created_at")),
+            "updated_at": restore_ts(user.get("updated_at") or user.get("created_at")),
+        }
+    return normalized
+
+
+def get_users_locked() -> dict:
+    users = state.shared_state.get("users")
+    if not isinstance(users, dict):
+        users = default_users()
+        state.shared_state["users"] = users
+    return users
+
+
+def serialize_user(user: dict) -> dict:
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "role": normalize_user_role(user.get("role")),
+        "password_configured": bool(user.get("password_hash")),
+        "api_key_configured": bool(user.get("api_key_hash")),
+        "created_at": user.get("created_at"),
+        "updated_at": user.get("updated_at"),
+    }
+
+
+def list_users() -> list[dict]:
+    with state.state_lock:
+        users = list(get_users_locked().values())
+        users.sort(key=lambda user: user.get("username", "").lower())
+        return [serialize_user(user) for user in users]
+
+
+def find_user_by_username_locked(username: str) -> dict | None:
+    username_key = normalize_username(username).lower()
+    if not username_key:
+        return None
+    for user in get_users_locked().values():
+        if user.get("username", "").lower() == username_key:
+            return user
+    return None
+
+
+def set_user(
+    username: str,
+    password: str | None = None,
+    api_key: str | None = None,
+    role: str = "user",
+) -> dict:
+    clean_username = normalize_username(username)
+    if not clean_username:
+        raise ValueError("Username required")
+    clean_role = normalize_user_role(role)
+    with state.state_lock:
+        users = get_users_locked()
+        user = find_user_by_username_locked(clean_username)
+        now = config.now_ts()
+        if user is None:
+            user_id = make_user_id()
+            user = {
+                "id": user_id,
+                "username": clean_username,
+                "role": clean_role,
+                "password_hash": None,
+                "api_key_hash": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+            users[user_id] = user
+        user["username"] = clean_username
+        user["role"] = clean_role
+        if password is not None:
+            user["password_hash"] = hash_password(password.strip()) if password.strip() else None
+        if api_key is not None:
+            user["api_key_hash"] = hash_password(api_key.strip()) if api_key.strip() else None
+        user["updated_at"] = now
+        persist_state_locked()
+        return serialize_user(user)
+
+
+def delete_user(user_id: str) -> bool:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        return False
+    with state.state_lock:
+        users = get_users_locked()
+        removed = users.pop(clean_user_id, None)
+        if removed is None:
+            return False
+        persist_state_locked()
+        return True
+
+
 def persisted_payload() -> dict:
     return {
         "workspaces": [
@@ -572,6 +718,17 @@ def read_shelved_settings() -> dict:
     return normalize_app_settings(settings)
 
 
+def read_shelved_users() -> dict:
+    if not shelve_index_exists():
+        return default_users()
+    try:
+        with shelve.open(str(uploads_index_path()), flag="r") as index:
+            users = index.get(PERSISTED_USERS_KEY, {})
+    except Exception:
+        return default_users()
+    return normalize_users(users)
+
+
 def read_legacy_json_payload() -> dict:
     index_path = legacy_uploads_index_path()
     if not index_path.exists():
@@ -589,6 +746,7 @@ def persist_state_locked() -> None:
     with shelve.open(str(uploads_index_path()), flag="n") as index:
         index[PERSISTED_PAYLOAD_KEY] = persisted_payload()
         index[PERSISTED_SETTINGS_KEY] = normalize_app_settings(get_app_settings_locked())
+        index[PERSISTED_USERS_KEY] = normalize_users(get_users_locked())
         index.sync()
 
 
@@ -684,6 +842,7 @@ def load_persisted_workspaces() -> None:
         }
 
     settings = read_shelved_settings()
+    users = read_shelved_users()
     payload = read_shelved_payload() or read_legacy_json_payload()
     if payload:
         raw_workspaces = payload.get("workspaces")
@@ -768,6 +927,7 @@ def load_persisted_workspaces() -> None:
     with state.state_lock:
         reset_shared_state_locked(loaded_workspaces)
         state.shared_state["app_settings"] = settings
+        state.shared_state["users"] = users
         ensure_default_workspace_locked()
         persist_workspaces_locked()
 

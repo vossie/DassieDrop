@@ -20,6 +20,7 @@ shared_state = {
         "api_key_hash": None,
         "workspace_super_password_hash": None,
     },
+    "users": {},
     "update_check": {
         "checking": False,
         "last_checked_at": 0.0,

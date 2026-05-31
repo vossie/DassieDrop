@@ -1071,6 +1071,16 @@ input[type="file"] {
   margin: 0;
   font-weight: 650;
 }
+.users-form {
+  margin-bottom: 16px;
+}
+.user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 .dropzone {
   margin-top: 12px;
   border: 2px dashed var(--line);

@@ -24,6 +24,7 @@ def reset_app_state() -> None:
             "api_key_hash": None,
             "workspace_super_password_hash": None,
         }
+        state.shared_state["users"] = {}
         state.shared_state["update_check"] = {
             "checking": False,
             "last_checked_at": 0.0,
