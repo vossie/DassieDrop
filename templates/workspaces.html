@@ -40,7 +40,7 @@
     <article class="panel tab-panel workspace-panel">
       <div class="panel-title">
         <h2>Create Workspace</h2>
-        <div class="meta">Public workspaces open directly. Protected workspaces ask for a password.</div>
+        <div class="meta">Public workspaces open directly. Password-protected workspaces ask for a password. Explicit workspaces only open for selected users.</div>
       </div>
       <div class="row stack">
         <input id="workspaceName" class="inline-input workspace-input" type="text" maxlength="80" placeholder="Workspace name">
@@ -56,9 +56,13 @@
             <option value="0">Never</option>
           </select>
         </label>
-        <label class="checkbox-row" for="workspaceProtected">
-          <input id="workspaceProtected" type="checkbox">
-          <span>Password protected</span>
+        <label class="workspace-expiry-label" for="workspaceAccessMode">
+          <span>Access</span>
+          <select id="workspaceAccessMode" class="inline-input workspace-expiry-select">
+            <option value="public">Public</option>
+            <option value="password">Password protected</option>
+            <option value="explicit">Explicit users</option>
+          </select>
         </label>
         <div class="hidden-options" id="workspacePasswordWrap">
           <div class="password-field-wrap">

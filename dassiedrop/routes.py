@@ -315,6 +315,13 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_workspace_create()
             return
 
+        if parsed.path.startswith("/api/workspaces/") and parsed.path.endswith("/users"):
+            workspace_id = urllib.parse.unquote(
+                parsed.path.removeprefix("/api/workspaces/").removesuffix("/users")
+            )
+            self.handle_workspace_users_update(workspace_id)
+            return
+
         if parsed.path == "/api/settings":
             self.handle_settings_update()
             return
@@ -408,10 +415,33 @@ class AppHandler(BaseHTTPRequestHandler):
         return workspace_id
 
     def workspace_list_payload(self) -> dict:
+        current_user = auth.current_user(self)
+        users = []
+        if current_user is not None:
+            users = [
+                {
+                    "id": str(user.get("id") or ""),
+                    "username": str(user.get("username") or ""),
+                    "role": str(user.get("role") or ""),
+                }
+                for user in storage.list_users()
+            ]
         return {
             "workspaces": storage.list_workspaces(),
             "current_workspace_id": self.current_session_workspace_id(),
+            "current_user_id": str((current_user or {}).get("id") or ""),
+            "users": users,
         }
+
+    def current_user_id(self) -> str:
+        current_user = auth.current_user(self)
+        return str((current_user or {}).get("id") or "")
+
+    def user_can_manage_workspace(self, workspace: dict) -> bool:
+        current_user_id = self.current_user_id()
+        if auth.user_has_role(self, {"root", "admin"}):
+            return True
+        return bool(current_user_id) and str(workspace.get("owner_user_id") or "") == current_user_id
 
     def users_payload(self) -> dict:
         current_user = auth.current_user(self)
@@ -607,6 +637,12 @@ class AppHandler(BaseHTTPRequestHandler):
                 )
                 return
             auth.clear_throttle_failures(self, "workspace-shortcut", workspace["id"])
+        if not storage.workspace_user_can_access(workspace, self.current_user_id()):
+            self.redirect(
+                f"/workspaces?workspace={urllib.parse.quote(workspace_slug_value)}",
+                cookie=cookie,
+            )
+            return
         with state.state_lock:
             locked_workspace = storage.get_workspace_locked(workspace["id"])
             if locked_workspace is None:
@@ -671,6 +707,10 @@ class AppHandler(BaseHTTPRequestHandler):
         if type(expiry_seconds) is not int or expiry_seconds < 0:
             self.send_error(HTTPStatus.BAD_REQUEST, "Expiry seconds must be a non-negative integer")
             return
+        access_mode = payload.get("access_mode", "password" if password.strip() else "public")
+        if not isinstance(access_mode, str) or access_mode not in {"public", "password", "explicit"}:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Access mode must be public, password, or explicit")
+            return
 
         allowed, retry_after = auth.consume_rate_limit_token(
             self,
@@ -686,12 +726,13 @@ class AppHandler(BaseHTTPRequestHandler):
             name,
             password=password.strip(),
             expiry_seconds=expiry_seconds,
+            owner_user_id=self.current_user_id(),
+            access_mode=access_mode,
         )
         self.send_json(
             {
                 "workspace": workspace,
-                "workspaces": storage.list_workspaces(),
-                "current_workspace_id": self.current_session_workspace_id(),
+                **self.workspace_list_payload(),
             }
         )
 
@@ -805,7 +846,12 @@ class AppHandler(BaseHTTPRequestHandler):
         if not allowed:
             self.send_throttled("Too many workspace password attempts", retry_after)
             return
-        ok, message = storage.enter_workspace(session_id, workspace_selector, password=password)
+        ok, message = storage.enter_workspace(
+            session_id,
+            workspace_selector,
+            password=password,
+            user_id=self.current_user_id(),
+        )
         if not ok:
             status = HTTPStatus.NOT_FOUND if message == "Workspace not found" else HTTPStatus.FORBIDDEN
             if status == HTTPStatus.FORBIDDEN:
@@ -823,6 +869,28 @@ class AppHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def handle_workspace_users_update(self, workspace_id: str) -> None:
+        payload = self.parse_json_body()
+        if payload is None:
+            return
+        workspace = storage.get_workspace(workspace_id)
+        if workspace is None:
+            self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+            return
+        if not self.user_can_manage_workspace(workspace):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
+            return
+        user_ids = payload.get("user_ids", [])
+        if not isinstance(user_ids, list):
+            self.send_error(HTTPStatus.BAD_REQUEST, "User IDs must be a list")
+            return
+        try:
+            workspace = storage.set_workspace_explicit_users(workspace_id, user_ids)
+        except KeyError:
+            self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+            return
+        self.send_json({"workspace": workspace, **self.workspace_list_payload()})
+
     def handle_workspace_delete(self, workspace_id: str) -> None:
         payload = self.parse_json_body()
         if payload is None:
@@ -836,6 +904,13 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_throttled("Too many workspace password attempts", retry_after)
             return
         workspace = storage.get_workspace(workspace_id)
+        if (
+            workspace is not None
+            and storage.workspace_access_mode(workspace) == "explicit"
+            and not self.user_can_manage_workspace(workspace)
+        ):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
+            return
         ok, message = storage.delete_workspace(workspace_id, password=password)
         if not ok:
             status = HTTPStatus.NOT_FOUND if message == "Workspace not found" else HTTPStatus.FORBIDDEN
@@ -859,6 +934,9 @@ class AppHandler(BaseHTTPRequestHandler):
             workspace = storage.get_workspace_by_selector(explicit_workspace_selector)
             if workspace is None:
                 self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+                return None
+            if not storage.workspace_user_can_access(workspace, self.current_user_id()):
+                self.send_error(HTTPStatus.FORBIDDEN, "Workspace access denied")
                 return None
             allowed, retry_after = auth.throttle_status(self, "workspace-context", workspace["id"])
             if not allowed:
@@ -884,6 +962,10 @@ class AppHandler(BaseHTTPRequestHandler):
             if workspace is None:
                 auth.set_session_workspace(session_id, None)
                 self.send_error(HTTPStatus.CONFLICT, "Workspace not selected")
+                return None
+            if not storage.workspace_user_can_access(workspace, self.current_user_id()):
+                auth.set_session_workspace(session_id, None)
+                self.send_error(HTTPStatus.FORBIDDEN, "Workspace access denied")
                 return None
             return workspace_id
 
@@ -1070,6 +1152,10 @@ class AppHandler(BaseHTTPRequestHandler):
         if workspace is None:
             auth.record_throttle_failure(self, "short-link", normalized_code)
             self.send_access_denied()
+            return
+        if not storage.workspace_user_can_access(workspace, self.current_user_id()):
+            auth.record_throttle_failure(self, "short-link", normalized_code)
+            self.send_access_denied(browser_request=browser_request, short_code=normalized_code)
             return
         if payload.get("password_hash"):
             if not storage.entry_password_is_valid(payload, password):
@@ -1465,6 +1551,9 @@ class AppHandler(BaseHTTPRequestHandler):
         if workspace is None:
             self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
             return
+        if not storage.workspace_user_can_access(workspace, self.current_user_id()):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace access denied")
+            return
         allowed, retry_after = auth.throttle_status(self, "file-download", file_id)
         if not allowed:
             self.send_throttled("Too many password attempts", retry_after)
@@ -1494,6 +1583,9 @@ class AppHandler(BaseHTTPRequestHandler):
         workspace = storage.get_workspace(entry.get("workspace_id", config.DEFAULT_WORKSPACE_ID))
         if workspace is None:
             self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+            return
+        if not storage.workspace_user_can_access(workspace, self.current_user_id()):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace access denied")
             return
         allowed, retry_after = auth.throttle_status(self, "file-preview", file_id)
         if not allowed:

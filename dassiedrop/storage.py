@@ -235,13 +235,20 @@ def build_workspace(
     slug: str | None = None,
     created_at: float | None = None,
     last_used_at: float | None = None,
+    owner_user_id: str | None = None,
+    access_mode: str = "public",
+    explicit_user_ids: list[str] | None = None,
 ) -> dict:
     timestamp = config.now_ts() if created_at is None else created_at
+    normalized_access_mode = normalize_workspace_access_mode(access_mode, password_hash)
     return {
         "id": workspace_id or make_workspace_id(),
         "name": sanitize_workspace_name(name),
         "slug": (slug or workspace_slug(name)).strip().lower() or "workspace",
         "password_hash": password_hash,
+        "owner_user_id": str(owner_user_id or "").strip(),
+        "access_mode": normalized_access_mode,
+        "explicit_user_ids": normalize_workspace_user_ids(explicit_user_ids),
         "expiry_seconds": normalize_expiry_seconds(expiry_seconds),
         "created_at": timestamp,
         "updated_at": 0.0,
@@ -249,6 +256,27 @@ def build_workspace(
         "texts": [],
         "files": [],
     }
+
+
+def normalize_workspace_access_mode(mode: object, password_hash: str | None = None) -> str:
+    value = str(mode or "").strip().lower()
+    if value in {"public", "password", "explicit"}:
+        return value
+    return "password" if password_hash else "public"
+
+
+def normalize_workspace_user_ids(user_ids: object) -> list[str]:
+    if not isinstance(user_ids, list):
+        return []
+    normalized = []
+    seen = set()
+    for user_id in user_ids:
+        clean_user_id = str(user_id or "").strip()
+        if not clean_user_id or clean_user_id in seen:
+            continue
+        normalized.append(clean_user_id)
+        seen.add(clean_user_id)
+    return normalized
 
 
 def normalize_expiry_seconds(value: object) -> int:
@@ -403,6 +431,30 @@ def workspace_password_is_valid(workspace: dict, password: str) -> bool:
     return verify_password(password, workspace.get("password_hash"))
 
 
+def workspace_access_mode(workspace: dict) -> str:
+    return normalize_workspace_access_mode(workspace.get("access_mode"), workspace.get("password_hash"))
+
+
+def user_is_privileged_locked(user_id: str) -> bool:
+    user = get_users_locked().get(str(user_id or "").strip())
+    return user is not None and normalize_user_role(user.get("role")) in {"root", "admin"}
+
+
+def workspace_user_can_access(workspace: dict, user_id: str | None) -> bool:
+    if workspace_access_mode(workspace) != "explicit":
+        return True
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        return False
+    with state.state_lock:
+        locked_workspace = get_workspace_locked(workspace["id"]) or workspace
+        if user_is_privileged_locked(clean_user_id):
+            return True
+        if str(locked_workspace.get("owner_user_id") or "").strip() == clean_user_id:
+            return True
+        return clean_user_id in normalize_workspace_user_ids(locked_workspace.get("explicit_user_ids"))
+
+
 def workspace_delete_password_is_valid(workspace: dict, password: str) -> bool:
     if workspace.get("password_hash") is None:
         return True
@@ -426,6 +478,9 @@ def serialize_workspace_summary(workspace: dict) -> dict:
         "slug": slug,
         "path": f"/w/{slug}",
         "password_required": bool(workspace.get("password_hash")),
+        "access_mode": workspace_access_mode(workspace),
+        "owner_user_id": str(workspace.get("owner_user_id") or ""),
+        "explicit_user_ids": normalize_workspace_user_ids(workspace.get("explicit_user_ids")),
         "expiry_seconds": workspace_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
         "updated_at": workspace["updated_at"],
@@ -440,6 +495,9 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
         "name": workspace["name"],
         "slug": workspace_slug_value(workspace),
         "password_hash": workspace.get("password_hash"),
+        "owner_user_id": str(workspace.get("owner_user_id") or ""),
+        "access_mode": workspace_access_mode(workspace),
+        "explicit_user_ids": normalize_workspace_user_ids(workspace.get("explicit_user_ids")),
         "expiry_seconds": workspace_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
         "updated_at": workspace["updated_at"],
@@ -956,6 +1014,9 @@ def load_persisted_workspaces() -> None:
                         item.get("last_used_at") or item.get("updated_at") or item.get("created_at"),
                         config.now_ts(),
                     ),
+                    owner_user_id=str(item.get("owner_user_id") or "").strip(),
+                    access_mode=normalize_workspace_access_mode(item.get("access_mode"), item.get("password_hash")),
+                    explicit_user_ids=normalize_workspace_user_ids(item.get("explicit_user_ids")),
                 )
                 raw_texts = item.get("texts", [])
                 if not isinstance(raw_texts, list):
@@ -1167,9 +1228,20 @@ def make_unique_short_code_locked() -> str:
             return candidate
 
 
-def create_workspace(name: str, password: str = "", expiry_seconds: int | None = None) -> dict:
+def create_workspace(
+    name: str,
+    password: str = "",
+    expiry_seconds: int | None = None,
+    owner_user_id: str | None = None,
+    access_mode: str | None = None,
+    explicit_user_ids: list[str] | None = None,
+) -> dict:
     workspace_name = sanitize_workspace_name(name)
-    password_hash = hash_password(password.strip()) if password.strip() else None
+    selected_access_mode = access_mode or ("password" if password.strip() else "public")
+    clean_access_mode = normalize_workspace_access_mode(selected_access_mode)
+    password_hash = hash_password(password.strip()) if clean_access_mode == "password" and password.strip() else None
+    if clean_access_mode == "password" and password_hash is None:
+        clean_access_mode = "public"
     with state.state_lock:
         ensure_default_workspace_locked()
         workspace = build_workspace(
@@ -1177,8 +1249,28 @@ def create_workspace(name: str, password: str = "", expiry_seconds: int | None =
             slug=make_unique_workspace_slug_locked(workspace_name),
             password_hash=password_hash,
             expiry_seconds=expiry_seconds,
+            owner_user_id=owner_user_id,
+            access_mode=clean_access_mode,
+            explicit_user_ids=explicit_user_ids,
         )
         state.shared_state["workspaces"][workspace["id"]] = workspace
+        persist_workspaces_locked()
+        return serialize_workspace_summary(workspace)
+
+
+def set_workspace_explicit_users(workspace_id: str, user_ids: list[str]) -> dict:
+    clean_workspace_id = str(workspace_id or "").strip()
+    with state.state_lock:
+        workspace = get_workspace_locked(clean_workspace_id)
+        if workspace is None:
+            raise KeyError("Workspace not found")
+        users = get_users_locked()
+        clean_user_ids = [
+            user_id
+            for user_id in normalize_workspace_user_ids(user_ids)
+            if user_id in users
+        ]
+        workspace["explicit_user_ids"] = clean_user_ids
         persist_workspaces_locked()
         return serialize_workspace_summary(workspace)
 
@@ -1205,12 +1297,19 @@ def list_workspaces() -> list[dict]:
     return summaries
 
 
-def enter_workspace(session_id: str, workspace_selector: str, password: str = "") -> tuple[bool, str]:
+def enter_workspace(
+    session_id: str,
+    workspace_selector: str,
+    password: str = "",
+    user_id: str | None = None,
+) -> tuple[bool, str]:
     from .auth import set_session_workspace
 
     workspace = get_workspace_by_selector(workspace_selector)
     if workspace is None:
         return (False, "Workspace not found")
+    if not workspace_user_can_access(workspace, user_id):
+        return (False, "Workspace access denied")
     if workspace.get("password_hash") and not workspace_delete_password_is_valid(workspace, password):
         return (False, "Wrong workspace password")
 

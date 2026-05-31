@@ -1042,6 +1042,32 @@ input[type="file"] {
 .workspace-auth-row .password-field-wrap {
   width: min(100%, 320px);
 }
+.workspace-explicit-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.workspace-user-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.workspace-user-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+.workspace-explicit-editor button {
+  justify-self: start;
+}
 .workspace-cancel-btn {
   background: #eef2f7;
   color: var(--ink);

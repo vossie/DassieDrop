@@ -245,6 +245,42 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(created["password_required"])
         self.assertEqual(created["expiry_seconds"], app.EXPIRY_SECONDS)
 
+    def test_explicit_workspace_access_allows_owner_privileged_and_selected_users(self) -> None:
+        owner = storage.set_user("Owner", password="owner-pass", api_key="owner-api", role="user")
+        allowed_user = storage.set_user("Allowed", password="allowed-pass", api_key="allowed-api", role="user")
+        blocked_user = storage.set_user("Blocked", password="blocked-pass", api_key="blocked-api", role="user")
+        admin = storage.set_user("Admin", password="admin-pass", api_key="admin-api", role="admin")
+        workspace = app.create_workspace(
+            "Invite Only",
+            owner_user_id=owner["id"],
+            access_mode="explicit",
+        )
+
+        self.assertEqual(workspace["access_mode"], "explicit")
+        self.assertEqual(workspace["owner_user_id"], owner["id"])
+        self.assertFalse(workspace["password_required"])
+
+        owner_session = app.create_authorized_session()
+        ok, message = app.enter_workspace(owner_session, workspace["id"], user_id=owner["id"])
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+
+        blocked_session = app.create_authorized_session()
+        ok, message = app.enter_workspace(blocked_session, workspace["id"], user_id=blocked_user["id"])
+        self.assertFalse(ok)
+        self.assertEqual(message, "Workspace access denied")
+
+        storage.set_workspace_explicit_users(workspace["id"], [allowed_user["id"]])
+        allowed_session = app.create_authorized_session()
+        ok, message = app.enter_workspace(allowed_session, workspace["id"], user_id=allowed_user["id"])
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+
+        admin_session = app.create_authorized_session()
+        ok, message = app.enter_workspace(admin_session, workspace["id"], user_id=admin["id"])
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+
     def test_workspace_custom_expiry_controls_entry_expiry(self) -> None:
         workspace = app.create_workspace("Short Lived", expiry_seconds=60)
 
@@ -646,6 +682,11 @@ class HttpServerTests(unittest.TestCase):
             },
         )
 
+    def csrf_token(self, cookie: str) -> str:
+        page = self.request("GET", "/workspaces", headers={"Cookie": cookie})
+        self.assertEqual(page["status"], 200)
+        return page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
     def upload_with_cookie_session(self, filename: str, content: bytes, cookie: str):
         page = self.request("GET", "/workspaces", headers={"Cookie": cookie})
         token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
@@ -934,6 +975,89 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(payload["workspace"]["slug"], "qa-room")
         self.assertTrue(payload["workspace"]["password_required"])
         self.assertEqual(payload["workspace"]["expiry_seconds"], app.EXPIRY_SECONDS)
+
+    def test_workspace_creation_endpoint_records_creator_and_explicit_users(self) -> None:
+        self.start_server()
+        creator_cookie = self.user_cookie("creator", "creator-pass")
+        creator_id = next(user["id"] for user in storage.list_users() if user["username"] == "creator")
+        creator_token = self.csrf_token(creator_cookie)
+
+        response = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps(
+                {"name": "Team Room", "password": "", "expiry_seconds": 86400, "access_mode": "explicit"}
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": creator_cookie,
+                "X-CSRF-Token": creator_token,
+            },
+        )
+
+        self.assertEqual(response["status"], 200)
+        payload = json.loads(response["body"])
+        workspace = payload["workspace"]
+        self.assertEqual(workspace["access_mode"], "explicit")
+        self.assertEqual(workspace["owner_user_id"], creator_id)
+        self.assertEqual(workspace["explicit_user_ids"], [])
+        self.assertEqual(
+            sorted(payload["users"][0].keys()),
+            ["id", "role", "username"],
+        )
+
+        blocked_cookie = self.user_cookie("blocked", "blocked-pass")
+        blocked_id = next(user["id"] for user in storage.list_users() if user["username"] == "blocked")
+        blocked_token = self.csrf_token(blocked_cookie)
+        blocked_enter = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/enter",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": blocked_cookie,
+                "X-CSRF-Token": blocked_token,
+            },
+        )
+        self.assertEqual(blocked_enter["status"], 403)
+
+        update_response = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/users",
+            body=json.dumps({"user_ids": [blocked_id]}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": creator_cookie,
+                "X-CSRF-Token": creator_token,
+            },
+        )
+        self.assertEqual(update_response["status"], 200)
+        updated = json.loads(update_response["body"])["workspace"]
+        self.assertEqual(updated["explicit_user_ids"], [blocked_id])
+
+        allowed_enter = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/enter",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": blocked_cookie,
+                "X-CSRF-Token": blocked_token,
+            },
+        )
+        self.assertEqual(allowed_enter["status"], 200)
+
+        delete_response = self.request(
+            "DELETE",
+            f"/api/workspaces/{workspace['id']}",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": blocked_cookie,
+                "X-CSRF-Token": blocked_token,
+            },
+        )
+        self.assertEqual(delete_response["status"], 403)
 
     def test_workspace_creation_endpoint_accepts_custom_expiry(self) -> None:
         self.start_server()
@@ -2700,7 +2824,10 @@ class ScriptTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("Create Workspace", template)
+        self.assertIn('id="workspaceAccessMode"', template)
+        self.assertIn('value="explicit"', template)
         self.assertIn('fetch("/api/workspaces")', script)
+        self.assertIn("saveExplicitWorkspaceUsers", script)
         self.assertIn('href="/workspaces"', index)
         self.assertIn('class="hero-brand-link"', index)
         self.assertIn('/assets/DassieDrop-dassie-icon.png', index)
@@ -2720,7 +2847,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('className = "workspace-auth-row"', script)
         self.assertIn('if (workspace.id !== "default") {', script)
         self.assertIn('li.addEventListener("click"', script)
-        self.assertIn('if (event.target.closest("button, input, label, a")) {', script)
+        self.assertIn('if (event.target.closest("button, input, label, select, a")) {', script)
         self.assertIn('const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("workspace") || ""', script)
         self.assertIn('window.addEventListener("pageshow"', script)
         self.assertIn('window.addEventListener("pageshow"', (REPO_ROOT / "assets" / "app.js").read_text(encoding="utf-8"))

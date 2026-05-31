@@ -1,7 +1,7 @@
 const workspaceList = document.getElementById("workspaceList");
 const workspaceStatus = document.getElementById("workspaceStatus");
 const workspaceName = document.getElementById("workspaceName");
-const workspaceProtected = document.getElementById("workspaceProtected");
+const workspaceAccessMode = document.getElementById("workspaceAccessMode");
 const workspacePasswordWrap = document.getElementById("workspacePasswordWrap");
 const workspacePassword = document.getElementById("workspacePassword");
 const workspaceExpiry = document.getElementById("workspaceExpiry");
@@ -10,6 +10,8 @@ const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
 const csrfToken = (csrfMeta && csrfMeta.content) || "";
 let pendingWorkspaceAction = null;
+let knownUsers = [];
+let currentUserId = "";
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -25,8 +27,9 @@ window.addEventListener("pageshow", (event) => {
 });
 
 function toggleWorkspacePassword() {
-  workspacePasswordWrap.classList.toggle("visible", workspaceProtected.checked);
-  if (!workspaceProtected.checked) {
+  const passwordMode = workspaceAccessMode.value === "password";
+  workspacePasswordWrap.classList.toggle("visible", passwordMode);
+  if (!passwordMode) {
     workspacePassword.value = "";
   }
 }
@@ -89,13 +92,123 @@ async function loadWorkspaces() {
       throw new Error(`Workspace load failed: ${response.status}`);
     }
     const payload = await response.json();
-    renderWorkspaces(payload.workspaces || [], payload.current_workspace_id || null);
+    renderWorkspaces(
+      payload.workspaces || [],
+      payload.current_workspace_id || null,
+      payload.users || [],
+      payload.current_user_id || ""
+    );
   } catch (error) {
     setWorkspaceStatus("Could not load workspaces.");
   }
 }
 
-function renderWorkspaces(workspaces, currentWorkspaceId) {
+function workspaceScopeLabel(workspace) {
+  if (workspace.access_mode === "explicit") {
+    return "Explicit users";
+  }
+  if (workspace.access_mode === "password" || workspace.password_required) {
+    return "Password protected";
+  }
+  return "Public";
+}
+
+function currentUserCanManageWorkspace(workspace) {
+  const currentUser = knownUsers.find((user) => user.id === currentUserId);
+  const currentRole = currentUser ? currentUser.role : "";
+  return currentRole === "root" || currentRole === "admin" || workspace.owner_user_id === currentUserId;
+}
+
+async function saveExplicitWorkspaceUsers(workspace, selectedUserIds) {
+  try {
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/users`, {
+      method: "POST",
+      headers: withCsrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ user_ids: selectedUserIds })
+    });
+    if (!response.ok) {
+      throw new Error(`Workspace users update failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    renderWorkspaces(
+      payload.workspaces || [],
+      payload.current_workspace_id || null,
+      payload.users || [],
+      payload.current_user_id || ""
+    );
+    setWorkspaceStatus("Workspace access updated.");
+  } catch (error) {
+    setWorkspaceStatus("Could not update workspace access.");
+  }
+}
+
+function renderExplicitUserEditor(li, workspace) {
+  if (
+    workspace.id === "default" ||
+    workspace.access_mode !== "explicit" ||
+    !currentUserCanManageWorkspace(workspace)
+  ) {
+    return;
+  }
+
+  const editor = document.createElement("div");
+  editor.className = "workspace-explicit-editor";
+
+  const label = document.createElement("div");
+  label.className = "meta workspace-auth-label";
+  label.textContent = "Allowed users";
+  editor.appendChild(label);
+
+  const choices = document.createElement("div");
+  choices.className = "workspace-user-choice-list";
+  const selected = new Set(workspace.explicit_user_ids || []);
+
+  for (const user of knownUsers) {
+    if (!user.id || user.id === workspace.owner_user_id || user.role === "root" || user.role === "admin") {
+      continue;
+    }
+    const choice = document.createElement("label");
+    choice.className = "workspace-user-choice";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = user.id;
+    checkbox.checked = selected.has(user.id);
+
+    const name = document.createElement("span");
+    name.textContent = user.username || user.id;
+
+    choice.appendChild(checkbox);
+    choice.appendChild(name);
+    choices.appendChild(choice);
+  }
+
+  if (!choices.children.length) {
+    const empty = document.createElement("div");
+    empty.className = "meta";
+    empty.textContent = "No standard users exist yet.";
+    choices.appendChild(empty);
+  }
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.textContent = "Save Access";
+  saveBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const selectedUserIds = Array.from(choices.querySelectorAll("input[type='checkbox']:checked")).map(
+      (input) => input.value
+    );
+    saveExplicitWorkspaceUsers(workspace, selectedUserIds);
+  });
+
+  editor.appendChild(choices);
+  editor.appendChild(saveBtn);
+  li.appendChild(editor);
+}
+
+function renderWorkspaces(workspaces, currentWorkspaceId, users = knownUsers, userId = currentUserId) {
+  knownUsers = users;
+  currentUserId = userId;
   workspaceList.innerHTML = "";
   if (!workspaces.length) {
     const li = document.createElement("li");
@@ -109,7 +222,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     const li = document.createElement("li");
     li.className = "history-item workspace-item";
     li.addEventListener("click", (event) => {
-      if (event.target.closest("button, input, label, a")) {
+      if (event.target.closest("button, input, label, select, a")) {
         return;
       }
       openWorkspace(workspace);
@@ -127,7 +240,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
 
     const meta = document.createElement("div");
     meta.className = "meta workspace-meta";
-    const scope = workspace.password_required ? "Protected" : "Public";
+    const scope = workspaceScopeLabel(workspace);
     const current = workspace.id === currentWorkspaceId ? " • Current selection" : "";
     meta.textContent = `${scope} - ${formatWorkspaceExpiry(workspace.expiry_seconds)} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
 
@@ -166,7 +279,12 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
         }
         const payload = await response.json();
         pendingWorkspaceAction = null;
-        renderWorkspaces(payload.workspaces || [], payload.current_workspace_id || null);
+        renderWorkspaces(
+          payload.workspaces || [],
+          payload.current_workspace_id || null,
+          payload.users || [],
+          payload.current_user_id || ""
+        );
         setWorkspaceStatus("Workspace deleted.");
       } catch (error) {
         setWorkspaceStatus("Could not delete workspace.");
@@ -301,6 +419,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       window.setTimeout(() => authInput.focus(), 0);
     }
 
+    renderExplicitUserEditor(li, workspace);
     workspaceList.appendChild(li);
   }
 }
@@ -311,7 +430,8 @@ async function createWorkspace() {
     setWorkspaceStatus("Workspace name required.");
     return;
   }
-  const password = workspaceProtected.checked ? workspacePassword.value : "";
+  const accessMode = workspaceAccessMode.value;
+  const password = accessMode === "password" ? workspacePassword.value : "";
   const expirySeconds = Number.parseInt(workspaceExpiry.value, 10);
   if (!Number.isInteger(expirySeconds) || expirySeconds < 0) {
     setWorkspaceStatus("Workspace expiry invalid.");
@@ -321,25 +441,30 @@ async function createWorkspace() {
     const response = await fetch("/api/workspaces", {
       method: "POST",
       headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ name, password, expiry_seconds: expirySeconds })
+      body: JSON.stringify({ name, password, expiry_seconds: expirySeconds, access_mode: accessMode })
     });
     if (!response.ok) {
       throw new Error(`Workspace create failed: ${response.status}`);
     }
     workspaceName.value = "";
     workspaceExpiry.value = "86400";
-    workspaceProtected.checked = false;
+    workspaceAccessMode.value = "public";
     workspacePassword.value = "";
     toggleWorkspacePassword();
     const payload = await response.json();
-    renderWorkspaces(payload.workspaces || [], payload.current_workspace_id || null);
+    renderWorkspaces(
+      payload.workspaces || [],
+      payload.current_workspace_id || null,
+      payload.users || [],
+      payload.current_user_id || ""
+    );
     setWorkspaceStatus("Workspace created.");
   } catch (error) {
     setWorkspaceStatus("Could not create workspace.");
   }
 }
 
-workspaceProtected.addEventListener("change", toggleWorkspacePassword);
+workspaceAccessMode.addEventListener("change", toggleWorkspacePassword);
 createWorkspaceBtn.addEventListener("click", createWorkspace);
 workspaceName.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
