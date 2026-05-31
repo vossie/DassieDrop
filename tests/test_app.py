@@ -1215,6 +1215,37 @@ class HttpServerTests(unittest.TestCase):
         self.assertTrue(app.verify_password("new-alice-pass", updated["password_hash"]))
         self.assertTrue(app.verify_password("new-alice-api", updated["api_key_hash"]))
 
+    def test_root_user_can_change_own_username_and_role_when_another_root_remains(self) -> None:
+        self.start_server()
+        root = storage.set_user("root", password="root-pass", api_key="root-api", role="root")
+        storage.set_user("backup", password="backup-pass", api_key="backup-api", role="root")
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "root", "password": "root-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        cookie = login["headers"]["Set-Cookie"].split(";", 1)[0]
+        users_page = self.request("GET", "/users", headers={"Cookie": cookie})
+        token = users_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        response = self.request(
+            "POST",
+            f"/api/users/{root['id']}",
+            body=json.dumps({"username": "renamed-root", "role": "admin"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(response["status"], 200)
+        users = storage.read_shelved_users()
+        self.assertEqual(users[root["id"]]["username"], "renamed-root")
+        self.assertEqual(users[root["id"]]["role"], "admin")
+
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()
         config.WORKSPACE_CREATE_RATE_LIMIT_MAX_REQUESTS = 2
