@@ -1192,6 +1192,9 @@ class HttpServerTests(unittest.TestCase):
         access_page = self.request("GET", "/workspaces/access", headers={"Cookie": owner_cookie})
         self.assertEqual(access_page["status"], 200)
         self.assertIn('id="workspacePasswordPanel"', access_page["text"])
+        self.assertIn('id="workspacePasswordPanel" class="workspace-password-panel" >', access_page["text"])
+        self.assertIn('<div class="access-manager" hidden>', access_page["text"])
+        self.assertIn('<button id="saveAccessBtn" type="button" hidden>Save Access</button>', access_page["text"])
         token = access_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
         access_payload_response = self.request(
@@ -3076,6 +3079,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('id="hasAccessUsers"', access_template)
         self.assertIn('id="noAccessUsers"', access_template)
         self.assertIn('id="workspacePasswordPanel"', access_template)
+        self.assertIn("__PASSWORD_PANEL_HIDDEN__", access_template)
+        self.assertIn("__ACCESS_MANAGER_HIDDEN__", access_template)
         self.assertIn('id="workspaceAccessPassword"', access_template)
         self.assertIn('/assets/password-toggle.js', access_template)
         self.assertIn('fetch("/api/workspaces/access")', access_script)

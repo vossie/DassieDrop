@@ -581,6 +581,7 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
             return
 
+        access_mode = storage.workspace_access_mode(workspace)
         self.send_html(
             render_template(
                 "workspace_access.html",
@@ -589,6 +590,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     "__UPDATE_NOTICE__": update_notice_html(),
                     "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
                     "__WORKSPACE_NAME__": html.escape(storage.compact_workspace_name(workspace["name"])),
+                    "__PASSWORD_PANEL_HIDDEN__": "" if access_mode == "password" else "hidden",
+                    "__ACCESS_MANAGER_HIDDEN__": "" if access_mode == "explicit" else "hidden",
                 },
             ),
             cookie=cookie,

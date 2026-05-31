@@ -41,7 +41,7 @@
         <h2>Workspace Access</h2>
         <div class="meta">__WORKSPACE_NAME__</div>
       </div>
-      <div id="workspacePasswordPanel" class="workspace-password-panel" hidden>
+      <div id="workspacePasswordPanel" class="workspace-password-panel" __PASSWORD_PANEL_HIDDEN__>
         <h3>Workspace Password</h3>
         <div class="meta">Change the password required to open this workspace.</div>
         <div class="row settings-row">
@@ -54,7 +54,7 @@
           <button id="saveWorkspacePasswordBtn" type="button">Save Password</button>
         </div>
       </div>
-      <div class="access-manager">
+      <div class="access-manager" __ACCESS_MANAGER_HIDDEN__>
         <section class="access-column" aria-labelledby="hasAccessTitle">
           <h3 id="hasAccessTitle">Has Access</h3>
           <select id="hasAccessUsers" class="access-select" multiple size="12"></select>
@@ -69,7 +69,7 @@
         </section>
       </div>
       <div class="row text-controls-row">
-        <button id="saveAccessBtn" type="button">Save Access</button>
+        <button id="saveAccessBtn" type="button" __ACCESS_MANAGER_HIDDEN__>Save Access</button>
         <a class="workspace-cancel-btn button-link" href="/">Go Back</a>
       </div>
       <div class="status" id="accessStatus"></div>
