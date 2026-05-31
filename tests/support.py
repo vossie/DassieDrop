@@ -52,6 +52,8 @@ class CoreStateTestCase(unittest.TestCase):
         self.original_max_json_body_size = config.MAX_JSON_BODY_SIZE
         self.original_max_total_storage_bytes = config.MAX_TOTAL_STORAGE_BYTES
         self.original_session_ttl_seconds = config.SESSION_TTL_SECONDS
+        self.original_login_rate_limit_window_seconds = config.LOGIN_RATE_LIMIT_WINDOW_SECONDS
+        self.original_login_rate_limit_max_requests = config.LOGIN_RATE_LIMIT_MAX_REQUESTS
         self.original_upload_rate_limit_window_seconds = config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS
         self.original_upload_rate_limit_max_requests = config.UPLOAD_RATE_LIMIT_MAX_REQUESTS
         self.original_workspace_create_rate_limit_window_seconds = (
@@ -68,6 +70,8 @@ class CoreStateTestCase(unittest.TestCase):
         config.MAX_JSON_BODY_SIZE = 1024 * 1024
         config.MAX_TOTAL_STORAGE_BYTES = 0
         config.SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = 20
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = 60
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = 10
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -89,6 +93,8 @@ class CoreStateTestCase(unittest.TestCase):
         config.MAX_JSON_BODY_SIZE = self.original_max_json_body_size
         config.MAX_TOTAL_STORAGE_BYTES = self.original_max_total_storage_bytes
         config.SESSION_TTL_SECONDS = self.original_session_ttl_seconds
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = self.original_login_rate_limit_window_seconds
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = self.original_login_rate_limit_max_requests
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = self.original_upload_rate_limit_window_seconds
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = self.original_upload_rate_limit_max_requests
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = (
@@ -118,6 +124,8 @@ class CoreHttpTestCase(unittest.TestCase):
         self.original_max_json_body_size = config.MAX_JSON_BODY_SIZE
         self.original_max_total_storage_bytes = config.MAX_TOTAL_STORAGE_BYTES
         self.original_session_ttl_seconds = config.SESSION_TTL_SECONDS
+        self.original_login_rate_limit_window_seconds = config.LOGIN_RATE_LIMIT_WINDOW_SECONDS
+        self.original_login_rate_limit_max_requests = config.LOGIN_RATE_LIMIT_MAX_REQUESTS
         self.original_upload_rate_limit_window_seconds = config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS
         self.original_upload_rate_limit_max_requests = config.UPLOAD_RATE_LIMIT_MAX_REQUESTS
         self.original_workspace_create_rate_limit_window_seconds = (
@@ -135,6 +143,8 @@ class CoreHttpTestCase(unittest.TestCase):
         config.MAX_JSON_BODY_SIZE = 1024 * 1024
         config.MAX_TOTAL_STORAGE_BYTES = 0
         config.SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = 20
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = 60
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = 10
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -162,6 +172,8 @@ class CoreHttpTestCase(unittest.TestCase):
         config.MAX_JSON_BODY_SIZE = self.original_max_json_body_size
         config.MAX_TOTAL_STORAGE_BYTES = self.original_max_total_storage_bytes
         config.SESSION_TTL_SECONDS = self.original_session_ttl_seconds
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = self.original_login_rate_limit_window_seconds
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = self.original_login_rate_limit_max_requests
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = self.original_upload_rate_limit_window_seconds
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = self.original_upload_rate_limit_max_requests
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = (

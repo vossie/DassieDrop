@@ -92,6 +92,15 @@ class ManagementRoutesMixin:
         if not allowed:
             self.send_throttled("Too many login attempts", retry_after)
             return
+        allowed, retry_after = auth.consume_rate_limit_token(
+            self,
+            "login-request",
+            config.LOGIN_RATE_LIMIT_MAX_REQUESTS,
+            config.LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+        )
+        if not allowed:
+            self.send_throttled("Too many login requests", retry_after)
+            return
 
         payload = self.read_json_body()
         if payload is None:

@@ -383,6 +383,39 @@ class SecurityHttpTests(CoreHttpTestCase):
         )
         self.assertEqual(recovered["status"], 200)
 
+    def test_login_request_volume_is_rate_limited_even_with_valid_passwords(self) -> None:
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = 2
+        self.start_server(access_code="secret-code")
+
+        for _ in range(config.LOGIN_RATE_LIMIT_MAX_REQUESTS):
+            response = self.request(
+                "POST",
+                "/login",
+                body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(response["status"], 200)
+
+        throttled = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(throttled["status"], 429)
+        self.assertEqual(throttled["headers"]["Retry-After"], "60")
+        self.assertIn("Too many login requests", throttled["text"])
+
+        self.current_time += config.LOGIN_RATE_LIMIT_WINDOW_SECONDS + 1
+        recovered = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(recovered["status"], 200)
+
     def test_text_reveal_is_rate_limited_after_repeated_wrong_passwords(self) -> None:
         self.start_server()
 
