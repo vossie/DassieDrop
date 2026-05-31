@@ -444,8 +444,16 @@ class AppHandler(BaseHTTPRequestHandler):
         return workspace_id
 
     def workspace_list_payload(self) -> dict:
+        workspaces = [
+            workspace
+            for workspace in storage.list_workspaces()
+            if storage.workspace_user_can_access(workspace, self.current_user_id())
+        ]
         return {
-            "workspaces": storage.list_workspaces(),
+            "workspaces": [
+                {**workspace, "can_delete": self.user_can_delete_workspace(workspace)}
+                for workspace in workspaces
+            ],
             "current_workspace_id": self.current_session_workspace_id(),
         }
 
@@ -458,6 +466,13 @@ class AppHandler(BaseHTTPRequestHandler):
         if auth.user_has_role(self, {"root", "admin"}):
             return True
         return bool(current_user_id) and str(workspace.get("owner_user_id") or "") == current_user_id
+
+    def user_can_delete_workspace(self, workspace: dict) -> bool:
+        if workspace.get("id") == config.DEFAULT_WORKSPACE_ID:
+            return auth.user_has_role(self, {"root"})
+        if not auth.access_code_is_configured():
+            return True
+        return self.user_can_manage_workspace(workspace)
 
     def users_payload(self) -> dict:
         current_user = auth.current_user(self)
@@ -1035,6 +1050,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_throttled("Too many workspace password attempts", retry_after)
             return
         workspace = storage.get_workspace(workspace_id)
+        if workspace is not None and not self.user_can_delete_workspace(workspace):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
+            return
         if (
             workspace is not None
             and storage.workspace_access_mode(workspace) == "explicit"

@@ -124,7 +124,7 @@ paths:
     delete:
       tags: [Workspaces]
       summary: Delete a workspace
-      description: The default workspace cannot be deleted.
+      description: Only workspace managers can delete workspaces. The default workspace can only be deleted by a root user.
       security:
         - sessionCookie: []
         - apiKeyAuth: []

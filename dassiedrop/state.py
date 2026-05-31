@@ -13,6 +13,7 @@ janitor_thread: threading.Thread | None = None
 janitor_stop_event = threading.Event()
 shared_state = {
     "workspaces": {},
+    "default_workspace_deleted": False,
     "reserved_upload_bytes": 0,
     "reserved_upload_names": set(),
     "app_settings": {

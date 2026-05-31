@@ -180,6 +180,7 @@ def total_storage_bytes() -> int:
 
 def reset_shared_state_locked(workspaces: dict | None = None) -> None:
     state.shared_state["workspaces"] = {} if workspaces is None else workspaces
+    state.shared_state["default_workspace_deleted"] = False
     state.shared_state["reserved_upload_bytes"] = 0
     state.shared_state["reserved_upload_names"] = set()
     state.shared_state["app_settings"] = default_app_settings()
@@ -335,6 +336,7 @@ def ensure_default_workspace_locked() -> dict:
             created_at=0.0,
         )
         state.shared_state["workspaces"][config.DEFAULT_WORKSPACE_ID] = workspace
+    state.shared_state["default_workspace_deleted"] = False
     return workspace
 
 
@@ -343,17 +345,16 @@ def workspace_sort_key(item: dict) -> tuple[int, str]:
 
 
 def list_workspace_objects_locked() -> list[dict]:
-    ensure_default_workspace_locked()
+    if not state.shared_state.get("default_workspace_deleted"):
+        ensure_default_workspace_locked()
     return sorted(state.shared_state["workspaces"].values(), key=workspace_sort_key)
 
 
 def get_workspace_locked(workspace_id: str) -> dict | None:
-    ensure_default_workspace_locked()
     return state.shared_state["workspaces"].get(workspace_id)
 
 
 def get_workspace_by_slug_locked(slug: str) -> dict | None:
-    ensure_default_workspace_locked()
     target = slug.strip().lower()
     if not target:
         return None
@@ -856,6 +857,7 @@ def delete_user(user_id: str) -> bool:
 
 def persisted_payload() -> dict:
     return {
+        "default_workspace_deleted": bool(state.shared_state.get("default_workspace_deleted")),
         "workspaces": [
             serialize_persisted_workspace(workspace)
             for workspace in list_workspace_objects_locked()
@@ -921,7 +923,6 @@ def read_legacy_json_payload() -> dict:
 
 def persist_state_locked() -> None:
     ensure_upload_dir()
-    ensure_default_workspace_locked()
     with shelve.open(str(uploads_index_path()), flag="n") as index:
         index[PERSISTED_PAYLOAD_KEY] = persisted_payload()
         index[PERSISTED_SETTINGS_KEY] = normalize_app_settings(get_app_settings_locked())
@@ -1112,10 +1113,12 @@ def load_persisted_workspaces() -> None:
 
     with state.state_lock:
         reset_shared_state_locked(loaded_workspaces)
+        state.shared_state["default_workspace_deleted"] = bool(payload.get("default_workspace_deleted"))
         state.shared_state["app_settings"] = settings
         state.shared_state["users"] = users
         ensure_bootstrap_root_user_locked()
-        ensure_default_workspace_locked()
+        if not state.shared_state["default_workspace_deleted"]:
+            ensure_default_workspace_locked()
         persist_workspaces_locked()
 
 
@@ -1146,8 +1149,6 @@ def prune_expired_entries() -> list[str]:
                 removed_workspaces.append(state.shared_state["workspaces"].pop(workspace["id"]))
             elif pruned:
                 changed_workspace_ids.append(workspace["id"])
-        if removed_workspaces:
-            ensure_default_workspace_locked()
         if changed_workspace_ids or removed_workspaces:
             persist_workspaces_locked()
     for workspace in removed_workspaces:
@@ -1340,8 +1341,6 @@ def list_workspaces() -> list[dict]:
             if workspace_is_inactive_locked(workspace):
                 removed_workspaces.append(state.shared_state["workspaces"].pop(workspace["id"]))
                 changed = True
-        if removed_workspaces:
-            ensure_default_workspace_locked()
         if changed:
             persist_workspaces_locked()
         summaries = [
@@ -1391,7 +1390,8 @@ def delete_workspace(workspace_id: str, password: str = "") -> tuple[bool, str]:
         if locked_workspace is None:
             return (False, "Workspace not found")
         removed_workspace = state.shared_state["workspaces"].pop(workspace_id)
-        ensure_default_workspace_locked()
+        if workspace_id == config.DEFAULT_WORKSPACE_ID:
+            state.shared_state["default_workspace_deleted"] = True
         persist_workspaces_locked()
 
     delete_workspace_artifacts(removed_workspace)

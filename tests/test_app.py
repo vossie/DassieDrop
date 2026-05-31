@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def reset_app_state() -> None:
     with state.state_lock:
         state.shared_state["workspaces"] = {}
+        state.shared_state["default_workspace_deleted"] = False
         state.shared_state["reserved_upload_bytes"] = 0
         state.shared_state["reserved_upload_names"] = set()
         state.shared_state["app_settings"] = {
@@ -513,6 +514,16 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+    def test_default_workspace_can_be_deleted_and_is_not_recreated_by_listing(self) -> None:
+        self.assertIn(app.DEFAULT_WORKSPACE_ID, {item["id"] for item in app.list_workspaces()})
+
+        deleted, delete_message = app.delete_workspace(app.DEFAULT_WORKSPACE_ID)
+
+        self.assertTrue(deleted)
+        self.assertEqual(delete_message, "")
+        self.assertNotIn(app.DEFAULT_WORKSPACE_ID, {item["id"] for item in app.list_workspaces()})
+        self.assertTrue(app.read_shelved_payload()["default_workspace_deleted"])
 
     def test_user_records_are_hashed_and_persisted(self) -> None:
         user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
@@ -1614,6 +1625,112 @@ class HttpServerTests(unittest.TestCase):
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(blocked["status"], 429)
+
+    def test_workspace_list_hides_inaccessible_explicit_and_marks_deletable(self) -> None:
+        self.start_server()
+        owner_cookie = self.user_cookie("owner", "owner-pass")
+        outsider_cookie = self.user_cookie("outsider", "outsider-pass")
+        root_cookie = self.root_cookie("root", "root-pass")
+        owner = next(user for user in storage.list_users() if user["username"] == "owner")
+        allowed = next(user for user in storage.list_users() if user["username"] == "outsider")
+        owned = app.create_workspace("Owned Room", owner_user_id=owner["id"])
+        explicit = app.create_workspace(
+            "Invite Only",
+            owner_user_id=owner["id"],
+            access_mode="explicit",
+            explicit_user_ids=[allowed["id"]],
+        )
+        hidden = app.create_workspace("Hidden Room", owner_user_id=owner["id"], access_mode="explicit")
+
+        owner_response = self.request("GET", "/api/workspaces", headers={"Cookie": owner_cookie})
+        owner_payload = json.loads(owner_response["body"])
+        owner_workspaces = {workspace["id"]: workspace for workspace in owner_payload["workspaces"]}
+        self.assertTrue(owner_workspaces[owned["id"]]["can_delete"])
+        self.assertTrue(owner_workspaces[explicit["id"]]["can_delete"])
+        self.assertFalse(owner_workspaces[app.DEFAULT_WORKSPACE_ID]["can_delete"])
+
+        outsider_response = self.request("GET", "/api/workspaces", headers={"Cookie": outsider_cookie})
+        outsider_payload = json.loads(outsider_response["body"])
+        outsider_ids = {workspace["id"] for workspace in outsider_payload["workspaces"]}
+        self.assertIn(explicit["id"], outsider_ids)
+        self.assertNotIn(hidden["id"], outsider_ids)
+        outsider_workspaces = {workspace["id"]: workspace for workspace in outsider_payload["workspaces"]}
+        self.assertFalse(outsider_workspaces[explicit["id"]]["can_delete"])
+
+        root_response = self.request("GET", "/api/workspaces", headers={"Cookie": root_cookie})
+        root_payload = json.loads(root_response["body"])
+        root_workspaces = {workspace["id"]: workspace for workspace in root_payload["workspaces"]}
+        self.assertTrue(root_workspaces[app.DEFAULT_WORKSPACE_ID]["can_delete"])
+        self.assertIn(hidden["id"], root_workspaces)
+
+    def test_root_can_delete_default_workspace_and_home_redirects_to_workspaces(self) -> None:
+        self.start_server()
+        root_cookie = self.root_cookie("root", "root-pass")
+        workspaces_page = self.request("GET", "/workspaces", headers={"Cookie": root_cookie})
+        token = workspaces_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+        self.assertEqual(self.select_workspace(root_cookie, app.DEFAULT_WORKSPACE_ID)["status"], 200)
+
+        delete_response = self.request(
+            "DELETE",
+            f"/api/workspaces/{app.DEFAULT_WORKSPACE_ID}",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": root_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(delete_response["status"], 200)
+        payload = json.loads(delete_response["body"])
+        self.assertNotIn(app.DEFAULT_WORKSPACE_ID, {workspace["id"] for workspace in payload["workspaces"]})
+        home = self.request("GET", "/", headers={"Cookie": root_cookie})
+        self.assertEqual(home["status"], 303)
+        self.assertEqual(home["headers"]["Location"], "/workspaces")
+
+    def test_non_root_cannot_delete_default_workspace(self) -> None:
+        self.start_server()
+        user_cookie = self.user_cookie("alice", "alice-pass")
+        workspaces_page = self.request("GET", "/workspaces", headers={"Cookie": user_cookie})
+        token = workspaces_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        delete_response = self.request(
+            "DELETE",
+            f"/api/workspaces/{app.DEFAULT_WORKSPACE_ID}",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": user_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(delete_response["status"], 403)
+        self.assertIn(app.DEFAULT_WORKSPACE_ID, {workspace["id"] for workspace in app.list_workspaces()})
+
+    def test_non_manager_cannot_delete_another_users_workspace(self) -> None:
+        self.start_server()
+        owner_cookie = self.user_cookie("owner", "owner-pass")
+        outsider_cookie = self.user_cookie("outsider", "outsider-pass")
+        owner = next(user for user in storage.list_users() if user["username"] == "owner")
+        workspace = app.create_workspace("Owned Room", owner_user_id=owner["id"])
+        workspaces_page = self.request("GET", "/workspaces", headers={"Cookie": outsider_cookie})
+        token = workspaces_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        delete_response = self.request(
+            "DELETE",
+            f"/api/workspaces/{workspace['id']}",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": outsider_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+
+        self.assertEqual(delete_response["status"], 403)
+        self.assertIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+        self.assertEqual(self.select_workspace(owner_cookie, workspace["id"])["status"], 200)
 
     def test_text_drop_endpoint_adds_text_to_history(self) -> None:
         self.start_server()
@@ -3109,7 +3226,7 @@ class ScriptTests(unittest.TestCase):
         self.assertNotIn("Choose a workspace or create a new one", template)
         self.assertNotIn("window.prompt", script)
         self.assertIn('className = "workspace-auth-row"', script)
-        self.assertIn('if (workspace.id !== "default") {', script)
+        self.assertIn("if (workspace.can_delete) {", script)
         self.assertIn('li.addEventListener("click"', script)
         self.assertIn('if (event.target.closest("button, input, label, select, a")) {', script)
         self.assertIn('const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("workspace") || ""', script)

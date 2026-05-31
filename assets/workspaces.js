@@ -214,7 +214,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     });
 
     actions.appendChild(enterBtn);
-    if (workspace.id !== "default") {
+    if (workspace.can_delete) {
       actions.appendChild(deleteBtn);
     }
     row.appendChild(details);
