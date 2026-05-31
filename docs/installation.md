@@ -92,6 +92,8 @@ HTTPS_SELF_SIGNED_HOST=192.168.1.24
 On a new installation DassieDrop creates a root user named `admin` with password `password`.
 Change that password from the Users page after first login.
 
+Root users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
+
 ## Run With HTTPS
 
 DassieDrop can generate a local self-signed certificate automatically when you enable HTTPS.

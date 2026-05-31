@@ -1114,6 +1114,72 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(delete_response["status"], 403)
 
+    def test_explicit_workspace_api_key_access_and_management(self) -> None:
+        self.start_server()
+        owner = storage.set_user("Owner", password="owner-pass", api_key="owner-api", role="user")
+        allowed = storage.set_user("Allowed", password="allowed-pass", api_key="allowed-api", role="user")
+        blocked = storage.set_user("Blocked", password="blocked-pass", api_key="blocked-api", role="user")
+
+        create_response = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps(
+                {
+                    "name": "API Team",
+                    "access_mode": "explicit",
+                    "explicit_user_ids": [allowed["id"]],
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-API-Key": "owner-api"},
+        )
+        self.assertEqual(create_response["status"], 200)
+        workspace = json.loads(create_response["body"])["workspace"]
+        self.assertEqual(workspace["access_mode"], "explicit")
+        self.assertEqual(workspace["owner_user_id"], owner["id"])
+        self.assertEqual(workspace["explicit_user_ids"], [allowed["id"]])
+
+        allowed_state = self.request(
+            "GET",
+            "/api/state",
+            headers={"X-API-Key": "allowed-api", "X-Workspace": workspace["slug"]},
+        )
+        self.assertEqual(allowed_state["status"], 200)
+
+        blocked_state = self.request(
+            "GET",
+            "/api/state",
+            headers={"X-API-Key": "blocked-api", "X-Workspace": workspace["slug"]},
+        )
+        self.assertEqual(blocked_state["status"], 403)
+
+        share_response = self.request(
+            "POST",
+            "/api/share-text",
+            body=json.dumps({"text": "from automation"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-API-Key": "allowed-api",
+                "X-Workspace": workspace["slug"],
+            },
+        )
+        self.assertEqual(share_response["status"], 200)
+
+        update_response = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/users",
+            body=json.dumps({"user_ids": [blocked["id"]]}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-API-Key": "owner-api"},
+        )
+        self.assertEqual(update_response["status"], 200)
+        self.assertEqual(json.loads(update_response["body"])["workspace"]["explicit_user_ids"], [blocked["id"]])
+
+        blocked_state = self.request(
+            "GET",
+            "/api/state",
+            headers={"X-API-Key": "blocked-api", "X-Workspace": workspace["slug"]},
+        )
+        self.assertEqual(blocked_state["status"], 200)
+
     def test_explicit_workspace_access_page_manages_selected_users(self) -> None:
         self.start_server()
         creator_cookie = self.user_cookie("creator", "creator-pass")
@@ -2919,7 +2985,7 @@ class ScriptTests(unittest.TestCase):
         index_template = (root / "templates" / "index.html").read_text(encoding="utf-8")
         version = (root / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(version, app.get_app_version())
-        self.assertIn("No cloud. No accounts. No syncing.", readme)
+        self.assertIn("No cloud. No syncing. No external account.", readme)
         self.assertIn("docs/api-usage.md", readme)
         self.assertIn("local-first drop zone", readme)
         self.assertIn("Python standard library", readme)
@@ -3246,7 +3312,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn(".tabs-access-link", stylesheet)
         self.assertIn(".header-access-link", stylesheet)
         self.assertIn(".header-lock-icon", stylesheet)
-        self.assertIn("/assets/access-lock.svg", (REPO_ROOT / "dassiedrop" / "routes.py").read_text(encoding="utf-8"))
+        self.assertIn("/assets/access-lock.svg", (REPO_ROOT / "dassiedrop" / "route_pages.py").read_text(encoding="utf-8"))
         self.assertIn("@media (max-width: 900px)", stylesheet)
         self.assertIn(".tabs-access-link {\n    display: none;", stylesheet)
         self.assertIn('id="hasAccessUsers"', access_template)
@@ -3281,6 +3347,8 @@ class ScriptTests(unittest.TestCase):
             self.assertIn('href="/logout"', page)
         self.assertNotIn("Choose a workspace or create a new one", template)
         self.assertNotIn("window.prompt", script)
+        self.assertIn("function confirmWorkspaceDelete(workspace)", script)
+        self.assertIn("Are you sure you want to delete ${workspace.name}? All data will be lost.", script)
         self.assertIn('className = "workspace-auth-row"', script)
         self.assertIn("if (workspace.can_delete) {", script)
         self.assertIn('li.addEventListener("click"', script)

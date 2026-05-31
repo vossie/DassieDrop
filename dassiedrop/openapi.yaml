@@ -152,6 +152,73 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/workspaces/{workspaceId}/users:
+    post:
+      tags: [Workspaces]
+      summary: Replace the explicit access user list for a workspace
+      description: |
+        Only the workspace owner, an admin user, or a root user can manage
+        explicit workspace access. API clients may authenticate with
+        `X-API-Key`; browser sessions use the session cookie and CSRF token.
+      security:
+        - sessionCookie: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceUsersRequest'
+      responses:
+        '200':
+          description: Updated workspace access configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceAccessUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/workspaces/{workspaceId}/password:
+    post:
+      tags: [Workspaces]
+      summary: Change a password-protected workspace password
+      description: Only the workspace owner, an admin user, or a root user can change the password.
+      security:
+        - sessionCookie: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRequest'
+      responses:
+        '200':
+          description: Updated workspace access configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceAccessUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/state:
     get:
       tags: [Workspaces]
@@ -787,6 +854,20 @@ components:
           type: string
           enum: [public, password, explicit]
           default: public
+        explicit_user_ids:
+          type: array
+          description: Initial user ids granted access when `access_mode` is `explicit`.
+          items:
+            type: string
+      additionalProperties: false
+    WorkspaceUsersRequest:
+      type: object
+      required: [user_ids]
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
       additionalProperties: false
     WorkspaceSummary:
       type: object
@@ -796,6 +877,9 @@ components:
         - slug
         - path
         - password_required
+        - access_mode
+        - owner_user_id
+        - explicit_user_ids
         - expiry_seconds
         - message_expiry_seconds
         - created_at
@@ -813,6 +897,18 @@ components:
           type: string
         password_required:
           type: boolean
+        access_mode:
+          type: string
+          enum: [public, password, explicit]
+        owner_user_id:
+          type: string
+        explicit_user_ids:
+          type: array
+          items:
+            type: string
+        can_delete:
+          type: boolean
+          description: Present on workspace list items when the current user can delete the workspace.
         expiry_seconds:
           type: integer
           minimum: 0
@@ -833,6 +929,20 @@ components:
       type: object
       required: [workspaces, current_workspace_id]
       properties:
+        workspaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceSummary'
+        current_workspace_id:
+          type:
+            - string
+            - 'null'
+    WorkspaceAccessUpdateResponse:
+      type: object
+      required: [workspace, workspaces, current_workspace_id]
+      properties:
+        workspace:
+          $ref: '#/components/schemas/WorkspaceSummary'
         workspaces:
           type: array
           items:

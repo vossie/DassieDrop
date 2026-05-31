@@ -132,6 +132,12 @@ function workspaceScopeLabel(workspace) {
   return "Public";
 }
 
+function confirmWorkspaceDelete(workspace) {
+  return window.confirm(
+    `Are you sure you want to delete ${workspace.name}? All data will be lost.\n\nYes = delete, No = keep it.`
+  );
+}
+
 function renderWorkspaces(workspaces, currentWorkspaceId) {
   workspaceList.innerHTML = "";
   if (!workspaces.length) {
@@ -190,6 +196,9 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       event.stopPropagation();
       if (workspace.password_required) {
         setPendingWorkspaceAction(workspace.id, "delete");
+        return;
+      }
+      if (!confirmWorkspaceDelete(workspace)) {
         return;
       }
       try {
@@ -292,6 +301,9 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
         }
         try {
           if (action === "delete") {
+            if (!confirmWorkspaceDelete(workspace)) {
+              return;
+            }
             const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}`, {
               method: "DELETE",
               headers: withCsrfHeaders({ "Content-Type": "application/json" }),

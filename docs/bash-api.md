@@ -44,7 +44,29 @@ curl -sS \
   http://127.0.0.1:8000/api/workspaces
 ```
 
-Set `expiry_seconds` to `0` for a workspace whose items and workspace record never expire automatically.
+Set `expiry_seconds` to `0` for a workspace whose workspace record never expires automatically. Use `message_expiry_seconds` to control message and file expiry; messages and files cannot outlive the workspace. Workspace names must be unique after normalisation, so `Ops Desk` and `Ops-Desk` conflict.
+
+Create an explicit-access workspace from automation:
+
+```bash
+curl -sS \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: owner-user-api-key' \
+  -X POST \
+  -d '{"name":"ops-private","access_mode":"explicit","explicit_user_ids":["user-id-1","user-id-2"]}' \
+  http://127.0.0.1:8000/api/workspaces
+```
+
+Replace the explicit access list later:
+
+```bash
+curl -sS \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: owner-user-api-key' \
+  -X POST \
+  -d '{"user_ids":["user-id-2"]}' \
+  http://127.0.0.1:8000/api/workspaces/WORKSPACE_ID/users
+```
 
 Read state for a workspace by slug:
 
@@ -217,7 +239,7 @@ If you still want browser-style session auth from bash, you can log in first and
 curl -sS -c cookies.txt \
   -H 'Content-Type: application/json' \
   -X POST \
-  -d '{"code":"your-access-code"}' \
+  -d '{"username":"admin","password":"password"}' \
   http://127.0.0.1:8000/login
 ```
 
