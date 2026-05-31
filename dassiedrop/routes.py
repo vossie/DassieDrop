@@ -743,7 +743,12 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_json({"user": user, "users": storage.list_users(), "roles": list(storage.USER_ROLES)})
 
     def handle_user_delete(self, user_id: str) -> None:
-        if not storage.delete_user(user_id):
+        try:
+            deleted = storage.delete_user(user_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        if not deleted:
             self.send_error(HTTPStatus.NOT_FOUND, "User not found")
             return
         self.send_json({"ok": True, "users": storage.list_users(), "roles": list(storage.USER_ROLES)})

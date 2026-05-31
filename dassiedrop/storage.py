@@ -619,6 +619,19 @@ def root_user_exists_locked() -> bool:
     return any(normalize_user_role(user.get("role")) == "root" for user in get_users_locked().values())
 
 
+def root_user_count_locked() -> int:
+    return sum(1 for user in get_users_locked().values() if normalize_user_role(user.get("role")) == "root")
+
+
+def is_last_root_user_locked(user_id: str) -> bool:
+    user = get_users_locked().get(user_id)
+    return (
+        user is not None
+        and normalize_user_role(user.get("role")) == "root"
+        and root_user_count_locked() <= 1
+    )
+
+
 def app_access_code_hash(settings: dict | None = None) -> str | None:
     source = settings if settings is not None else get_app_settings()
     if config.ACCESS_CODE:
@@ -736,6 +749,8 @@ def update_user(
         duplicate = find_user_by_username_locked(clean_username)
         if duplicate is not None and duplicate.get("id") != clean_user_id:
             raise ValueError("Username already exists")
+        if is_last_root_user_locked(clean_user_id) and clean_role != "root":
+            raise ValueError("At least one root user is required")
         user["username"] = clean_username
         user["role"] = clean_role
         if password is not None:
@@ -753,9 +768,11 @@ def delete_user(user_id: str) -> bool:
         return False
     with state.state_lock:
         users = get_users_locked()
-        removed = users.pop(clean_user_id, None)
-        if removed is None:
+        if clean_user_id not in users:
             return False
+        if is_last_root_user_locked(clean_user_id):
+            raise ValueError("At least one root user is required")
+        users.pop(clean_user_id)
         persist_state_locked()
         return True
 

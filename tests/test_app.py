@@ -505,6 +505,29 @@ class AppStateTests(unittest.TestCase):
         self.assertIn(existing["id"], users)
         self.assertEqual(users[existing["id"]]["username"], "Rooty")
 
+    def test_cannot_demote_or_delete_last_root_user(self) -> None:
+        root = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
+
+        with self.assertRaises(ValueError):
+            storage.update_user(root["id"], "Rooty", role="admin")
+        with self.assertRaises(ValueError):
+            storage.delete_user(root["id"])
+
+        users = storage.read_shelved_users()
+        self.assertEqual(len(users), 1)
+        self.assertEqual(users[root["id"]]["role"], "root")
+
+    def test_can_demote_or_delete_root_when_another_root_exists(self) -> None:
+        first = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
+        second = storage.set_user("Backup", password="backup-pass", api_key="backup-api", role="root")
+
+        updated = storage.update_user(first["id"], "Rooty", role="admin")
+
+        self.assertEqual(updated["role"], "admin")
+        storage.update_user(first["id"], "Rooty", role="root")
+        deleted = storage.delete_user(first["id"])
+        self.assertTrue(deleted)
+
     def test_share_payload_includes_workspace_metadata(self) -> None:
         workspace = app.create_workspace("Ops Desk")
         app.add_text_entry("hello", workspace_id=workspace["id"])
@@ -1046,6 +1069,46 @@ class HttpServerTests(unittest.TestCase):
         self.assertTrue(app.verify_password("secret-pass", stored["password_hash"]))
         self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
 
+        blocked_update = self.request(
+            "POST",
+            f"/api/users/{payload['user']['id']}",
+            body=json.dumps({"username": "alice", "role": "admin"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_update["status"], 400)
+        blocked_delete = self.request(
+            "DELETE",
+            f"/api/users/{payload['user']['id']}",
+            headers={
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_delete["status"], 400)
+
+        second_root = self.request(
+            "POST",
+            "/api/users",
+            body=json.dumps(
+                {
+                    "username": "backup",
+                    "password": "backup-pass",
+                    "api_key": "backup-api",
+                    "role": "root",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(second_root["status"], 200)
+
         updated = self.request(
             "POST",
             f"/api/users/{payload['user']['id']}",
@@ -1087,7 +1150,10 @@ class HttpServerTests(unittest.TestCase):
         )
 
         self.assertEqual(delete_response["status"], 200)
-        self.assertEqual(json.loads(delete_response["body"])["users"], [])
+        remaining_users = json.loads(delete_response["body"])["users"]
+        self.assertEqual(len(remaining_users), 1)
+        self.assertEqual(remaining_users[0]["username"], "backup")
+        self.assertEqual(remaining_users[0]["role"], "root")
 
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()
