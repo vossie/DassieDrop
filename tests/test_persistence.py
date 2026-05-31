@@ -341,11 +341,28 @@ class PersistenceTests(CoreStateTestCase):
         self.assertNotIn(workspace["id"], {item["id"] for item in persisted["workspaces"]})
 
     def test_duplicate_workspace_names_get_unique_stable_slugs_after_reload(self) -> None:
-        first = app.create_workspace("Ops Room")
-        second = app.create_workspace("Ops-Room")
-
-        self.assertEqual(first["slug"], "ops-room")
-        self.assertEqual(second["slug"], "ops-room-2")
+        first = {
+            "id": "ops-one",
+            "name": "Ops Room",
+            "created_at": self.current_time,
+            "updated_at": self.current_time,
+            "last_used_at": self.current_time,
+            "texts": [],
+            "files": [],
+        }
+        second = {
+            "id": "ops-two",
+            "name": "Ops-Room",
+            "created_at": self.current_time,
+            "updated_at": self.current_time,
+            "last_used_at": self.current_time,
+            "texts": [],
+            "files": [],
+        }
+        app.legacy_uploads_index_path().write_text(
+            json.dumps({"workspaces": [first, second]}),
+            encoding="utf-8",
+        )
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -362,8 +379,19 @@ class PersistenceTests(CoreStateTestCase):
         self.assertEqual(listed[second["id"]], "ops-room-2")
 
     def test_workspace_named_default_does_not_collide_with_built_in_default_slug_after_reload(self) -> None:
-        created = app.create_workspace("Default")
-        self.assertEqual(created["slug"], "default-2")
+        created = {
+            "id": "custom-default",
+            "name": "Default",
+            "created_at": self.current_time,
+            "updated_at": self.current_time,
+            "last_used_at": self.current_time,
+            "texts": [],
+            "files": [],
+        }
+        app.legacy_uploads_index_path().write_text(
+            json.dumps({"workspaces": [created]}),
+            encoding="utf-8",
+        )
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}

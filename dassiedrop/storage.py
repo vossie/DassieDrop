@@ -79,6 +79,14 @@ def make_unique_workspace_slug_locked(
         suffix += 1
 
 
+def workspace_name_exists_locked(name: str) -> bool:
+    clean_name = sanitize_workspace_name(name)
+    return any(
+        sanitize_workspace_name(str(workspace.get("name") or "")) == clean_name
+        for workspace in state.shared_state["workspaces"].values()
+    )
+
+
 def unique_filename(name: str) -> str:
     candidate = sanitize_filename(name)
     path = config.UPLOAD_DIR / candidate
@@ -759,19 +767,20 @@ def set_user(
     with state.state_lock:
         users = get_users_locked()
         user = find_user_by_username_locked(clean_username)
+        if user is not None:
+            raise ValueError("Username already exists")
         now = config.now_ts()
-        if user is None:
-            user_id = make_user_id()
-            user = {
-                "id": user_id,
-                "username": clean_username,
-                "role": clean_role,
-                "password_hash": None,
-                "api_key_hash": None,
-                "created_at": now,
-                "updated_at": now,
-            }
-            users[user_id] = user
+        user_id = make_user_id()
+        user = {
+            "id": user_id,
+            "username": clean_username,
+            "role": clean_role,
+            "password_hash": None,
+            "api_key_hash": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        users[user_id] = user
         user["username"] = clean_username
         user["role"] = clean_role
         if password is not None:
@@ -1283,7 +1292,10 @@ def create_workspace(
     if clean_access_mode == "password" and password_hash is None:
         clean_access_mode = "public"
     with state.state_lock:
-        ensure_default_workspace_locked()
+        if not state.shared_state.get("default_workspace_deleted"):
+            ensure_default_workspace_locked()
+        if workspace_name_exists_locked(workspace_name):
+            raise ValueError("Workspace name already exists")
         workspace = build_workspace(
             workspace_name,
             slug=make_unique_workspace_slug_locked(workspace_name),

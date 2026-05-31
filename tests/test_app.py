@@ -157,16 +157,15 @@ class AppStateTests(unittest.TestCase):
         self.assertIsNotNone(resolved)
         self.assertEqual(resolved["id"], workspace["id"])
 
-    def test_workspace_selector_uses_unique_workspace_slugs(self) -> None:
+    def test_workspace_creation_rejects_duplicate_normalized_names(self) -> None:
         first = app.create_workspace("Ops Desk")
-        second = app.create_workspace("Ops-Desk")
+
+        with self.assertRaisesRegex(ValueError, "Workspace name already exists"):
+            app.create_workspace("Ops-Desk")
 
         with state.state_lock:
             resolved_first = app.resolve_workspace_selector_locked("ops-desk")
-            resolved_second = app.resolve_workspace_selector_locked("ops-desk-2")
-
         self.assertEqual(resolved_first["id"], first["id"])
-        self.assertEqual(resolved_second["id"], second["id"])
 
     def test_text_entries_can_be_marked_hidden(self) -> None:
         app.add_text_entry("secret", hidden=True)
@@ -538,6 +537,12 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
         self.assertNotIn("secret-pass", str(stored))
         self.assertNotIn("secret-api", str(stored))
+
+    def test_user_creation_rejects_duplicate_usernames(self) -> None:
+        storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
+
+        with self.assertRaisesRegex(ValueError, "Username already exists"):
+            storage.set_user("alice", password="other-pass", api_key="other-api", role="user")
 
     def test_user_roles_default_to_user(self) -> None:
         user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="owner")
@@ -1409,6 +1414,26 @@ class HttpServerTests(unittest.TestCase):
         self.assertTrue(app.verify_password("secret-pass", stored["password_hash"]))
         self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
 
+        duplicate_user = self.request(
+            "POST",
+            "/api/users",
+            body=json.dumps(
+                {
+                    "username": "ALICE",
+                    "password": "duplicate-pass",
+                    "api_key": "duplicate-api",
+                    "role": "user",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(duplicate_user["status"], 400)
+        self.assertIn("Username already exists", duplicate_user["text"])
+
         second_root = self.request(
             "POST",
             "/api/users",
@@ -1427,6 +1452,19 @@ class HttpServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(second_root["status"], 200)
+
+        duplicate_update = self.request(
+            "POST",
+            f"/api/users/{payload['user']['id']}",
+            body=json.dumps({"username": "backup", "role": "admin"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(duplicate_update["status"], 400)
+        self.assertIn("Username already exists", duplicate_update["text"])
 
         updated = self.request(
             "POST",
@@ -1479,7 +1517,14 @@ class HttpServerTests(unittest.TestCase):
         self.start_server()
         root = storage.set_user("root", password="root-pass", api_key="root-api", role="root")
         user = storage.set_user("alice", password="alice-pass", api_key="alice-api", role="user")
-        cookie = self.user_cookie("alice", "alice-pass")
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "alice", "password": "alice-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        cookie = login["headers"]["Set-Cookie"].split(";", 1)[0]
 
         users_page = self.request("GET", "/users", headers={"Cookie": cookie})
         self.assertEqual(users_page["status"], 200)
@@ -1874,21 +1919,27 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(response["status"], 200)
         self.assertIn("openapi: 3.1.0", response["text"])
 
-    def test_duplicate_workspace_slugs_resolve_to_distinct_workspace_urls(self) -> None:
+    def test_duplicate_workspace_names_are_rejected_by_http_api(self) -> None:
         self.start_server()
-        first = app.create_workspace("Carel Space")
-        second = app.create_workspace("Carel-Space")
+        page = self.request("GET", "/workspaces")
+        token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
-        self.assertEqual(first["slug"], "carel-space")
-        self.assertEqual(second["slug"], "carel-space-2")
+        first = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps({"name": "Carel Space", "password": ""}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-CSRF-Token": token},
+        )
+        duplicate = self.request(
+            "POST",
+            "/api/workspaces",
+            body=json.dumps({"name": "Carel-Space", "password": ""}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-CSRF-Token": token},
+        )
 
-        response = self.request("GET", "/w/carel-space-2")
-
-        self.assertEqual(response["status"], 303)
-        cookie = response["headers"]["Set-Cookie"].split(";", 1)[0]
-        state = self.request("GET", "/api/state", headers={"Cookie": cookie})
-        self.assertEqual(state["status"], 200)
-        self.assertEqual(json.loads(state["body"])["workspace"]["id"], second["id"])
+        self.assertEqual(first["status"], 200)
+        self.assertEqual(duplicate["status"], 400)
+        self.assertIn("Workspace name already exists", duplicate["text"])
 
     def test_protected_workspace_slug_redirects_to_workspace_picker_without_password(self) -> None:
         self.start_server()

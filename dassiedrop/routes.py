@@ -721,14 +721,18 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_throttled("Too many workspaces created", retry_after)
             return
 
-        workspace = storage.create_workspace(
-            name,
-            password=password.strip(),
-            expiry_seconds=expiry_seconds,
-            message_expiry_seconds=message_expiry_seconds,
-            owner_user_id=self.current_user_id(),
-            access_mode=access_mode,
-        )
+        try:
+            workspace = storage.create_workspace(
+                name,
+                password=password.strip(),
+                expiry_seconds=expiry_seconds,
+                message_expiry_seconds=message_expiry_seconds,
+                owner_user_id=self.current_user_id(),
+                access_mode=access_mode,
+            )
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         self.send_json(
             {
                 "workspace": workspace,
