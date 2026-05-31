@@ -204,9 +204,9 @@ def _place_format(matrix: list[list[bool | None]], reserved: list[list[bool]], m
         + [(8, size - 8 + index) for index in range(8)]
     )
     for index, (row, col) in enumerate(first):
-        _set(matrix, reserved, row, col, bool((bits >> index) & 1))
+        _set(matrix, reserved, row, col, bool((bits >> (14 - index)) & 1))
     for index, (row, col) in enumerate(second):
-        _set(matrix, reserved, row, col, bool((bits >> index) & 1))
+        _set(matrix, reserved, row, col, bool((bits >> (14 - index)) & 1))
 
 
 def _base_matrix(version: int) -> tuple[list[list[bool | None]], list[list[bool]]]:
@@ -281,6 +281,6 @@ def qr_svg(text: str, scale: int = 4, border: int = 4) -> str:
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{pixel_size}" height="{pixel_size}" '
         f'viewBox="0 0 {view_size} {view_size}" role="img" aria-label="Authenticator QR code">'
         f'<rect width="100%" height="100%" fill="#fff"/>'
-        f'<g fill="#061a3a">{rect_text}</g>'
+        f'<g fill="#000">{rect_text}</g>'
         f"</svg>"
     )

@@ -603,6 +603,7 @@ class AppStateTests(unittest.TestCase):
         self.assertIn("secret", setup)
         self.assertIn("otpauth://totp/DassieDrop%3AAlice", setup["otpauth_uri"])
         self.assertIn("<svg", setup["qr_svg"])
+        self.assertIn('fill="#000"', setup["qr_svg"])
         self.assertIn('aria-label="Authenticator QR code"', setup["qr_svg"])
         code = storage.totp_code(setup["secret"], self.fake_now())
         confirmed = storage.confirm_user_totp_setup(user["id"], code)

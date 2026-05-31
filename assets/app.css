@@ -1288,8 +1288,9 @@ input[type="file"] {
 }
 .totp-qr-code svg {
   display: block;
-  width: 180px;
-  height: 180px;
+  width: 220px;
+  height: 220px;
+  image-rendering: pixelated;
 }
 .totp-setup-panel input[readonly] {
   background: #f8fafc;
