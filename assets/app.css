@@ -1064,8 +1064,12 @@ input[type="file"] {
 .workspace-create-row .password-field-wrap {
   width: 100%;
 }
-.workspace-create-submit {
+.workspace-create-submit-row {
   flex: 0 0 100%;
+  display: flex;
+}
+.workspace-create-submit {
+  flex: 0 0 auto;
   width: fit-content;
 }
 .workspace-auth-row {
@@ -1089,6 +1093,10 @@ input[type="file"] {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 16px;
   align-items: center;
+}
+.access-manager[hidden],
+#saveAccessBtn[hidden] {
+  display: none;
 }
 .workspace-password-panel {
   display: grid;
