@@ -201,8 +201,8 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       authLabel.className = "meta workspace-auth-label";
       authLabel.textContent =
         actionToRender === "delete"
-          ? "Enter the workspace password or super password to delete this workspace."
-          : "Enter the workspace password or super password to open this workspace.";
+          ? "Enter the workspace password or a root/admin user password to delete this workspace."
+          : "Enter the workspace password or a root/admin user password to open this workspace.";
 
       const authInput = document.createElement("input");
       authInput.type = "password";

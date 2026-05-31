@@ -190,19 +190,13 @@ Optional expiry policies for uploaded files and text.
 
 ### Secure
 
-Optional access codes and HTTPS support.
+User-based login, per-user API keys, roles, and HTTPS support.
 
-If you lock yourself out after setting a stored access code, stop DassieDrop,
-reset the stored code, then start DassieDrop again:
+On a new installation DassieDrop creates a root user:
 
-```bash
-python3 scripts/reset_access_code.py new-code
-```
-
-To remove the stored access code instead:
-
-```bash
-python3 scripts/reset_access_code.py --clear
+```text
+username: admin
+password: password
 ```
 
 ---

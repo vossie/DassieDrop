@@ -228,21 +228,25 @@ class AppHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/workspaces":
             if auth.access_code_is_configured() and not auth.is_authorized(self):
-                self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+                self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
                 return
             self.send_json(self.workspace_list_payload())
             return
 
         if parsed.path == "/api/settings":
             if auth.access_code_is_configured() and not auth.is_authorized(self):
-                self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+                self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
                 return
-            self.send_json(storage.serialize_app_settings())
+            if not self.require_root_user():
+                return
+            self.send_json({"security_managed_by": "users", "roles": list(storage.USER_ROLES)})
             return
 
         if parsed.path == "/api/users":
             if auth.access_code_is_configured() and not auth.is_authorized(self):
-                self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+                self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
+                return
+            if not self.require_root_user():
                 return
             self.send_json({"users": storage.list_users(), "roles": list(storage.USER_ROLES)})
             return
@@ -253,7 +257,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if auth.access_code_is_configured() and not auth.is_authorized(self):
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+            self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
             return
 
         if parsed.path == "/ws":
@@ -311,7 +315,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if auth.access_code_is_configured() and not auth.is_authorized(self):
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+            self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
             return
 
         if parsed.path == "/api/workspaces":
@@ -319,14 +323,20 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/settings":
+            if not self.require_root_user():
+                return
             self.handle_settings_update()
             return
 
         if parsed.path == "/api/users":
+            if not self.require_root_user():
+                return
             self.handle_user_save()
             return
 
         if parsed.path.startswith("/api/users/"):
+            if not self.require_root_user():
+                return
             user_id = urllib.parse.unquote(parsed.path.removeprefix("/api/users/"))
             self.handle_user_update(user_id)
             return
@@ -369,7 +379,7 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.FORBIDDEN, "CSRF token required")
             return
         if auth.access_code_is_configured() and not auth.is_authorized(self):
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+            self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
             return
 
         if parsed.path.startswith("/api/workspaces/"):
@@ -378,6 +388,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path.startswith("/api/users/"):
+            if not self.require_root_user():
+                return
             user_id = urllib.parse.unquote(parsed.path.removeprefix("/api/users/"))
             self.handle_user_delete(user_id)
             return
@@ -411,6 +423,15 @@ class AppHandler(BaseHTTPRequestHandler):
             "workspaces": storage.list_workspaces(),
             "current_workspace_id": self.current_session_workspace_id(),
         }
+
+    def require_root_user(self, html_response: bool = False) -> bool:
+        if not auth.user_has_role(self, {"root"}):
+            if html_response:
+                self.send_error(HTTPStatus.FORBIDDEN, "Root user required")
+            else:
+                self.send_error(HTTPStatus.FORBIDDEN, "Root user required")
+            return False
+        return True
 
     def handle_root(self) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
@@ -483,6 +504,8 @@ class AppHandler(BaseHTTPRequestHandler):
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
+        if not self.require_root_user(html_response=True):
+            return
 
         _, session, cookie = auth.ensure_browser_session(self)
         self.send_html(
@@ -500,6 +523,8 @@ class AppHandler(BaseHTTPRequestHandler):
     def handle_users_page(self) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
+            return
+        if not self.require_root_user(html_response=True):
             return
 
         _, session, cookie = auth.ensure_browser_session(self)
@@ -519,6 +544,8 @@ class AppHandler(BaseHTTPRequestHandler):
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
             return
+        if not self.require_root_user(html_response=True):
+            return
 
         _, session, cookie = auth.ensure_browser_session(self)
         self.send_html(
@@ -536,6 +563,8 @@ class AppHandler(BaseHTTPRequestHandler):
     def handle_edit_user_page(self) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
+            return
+        if not self.require_root_user(html_response=True):
             return
 
         _, session, cookie = auth.ensure_browser_session(self)
@@ -594,31 +623,33 @@ class AppHandler(BaseHTTPRequestHandler):
         self.redirect("/", cookie=cookie)
 
     def handle_login(self) -> None:
-        if not auth.access_code_is_configured():
-            session_id = auth.create_authorized_session(config.DEFAULT_WORKSPACE_ID)
-            self.send_json(
-                {"ok": True},
-                cookie=auth.session_cookie(session_id, secure=bool(getattr(self.server, "is_https", False))),
-            )
-            return
-
         allowed, retry_after = auth.throttle_status(self, "login")
         if not allowed:
-            self.send_throttled("Too many access code attempts", retry_after)
+            self.send_throttled("Too many login attempts", retry_after)
             return
 
         payload = self.read_json_body()
         if payload is None:
             return
 
-        code = payload.get("code", "")
-        if not isinstance(code, str) or not auth.access_code_is_valid(code):
+        username = payload.get("username", "")
+        password = payload.get("password", "")
+        if not isinstance(username, str) or not isinstance(password, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Username and password must be strings")
+            return
+        user = auth.login_user(username, password)
+        if user is None:
             auth.record_throttle_failure(self, "login")
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Wrong access code")
+            self.send_error(HTTPStatus.UNAUTHORIZED, "Wrong username or password")
             return
 
         auth.clear_throttle_failures(self, "login")
-        session_id = auth.create_authorized_session(config.DEFAULT_WORKSPACE_ID)
+        session_id = auth.create_authorized_session(
+            config.DEFAULT_WORKSPACE_ID,
+            user_id=user["id"],
+            username=user["username"],
+            role=user["role"],
+        )
         self.send_json(
             {"ok": True},
             cookie=auth.session_cookie(session_id, secure=bool(getattr(self.server, "is_https", False))),
@@ -669,21 +700,7 @@ class AppHandler(BaseHTTPRequestHandler):
         )
 
     def handle_settings_update(self) -> None:
-        payload = self.parse_json_body()
-        if payload is None:
-            return
-        accepted_keys = ("access_code", "api_key", "workspace_super_password")
-        updates = {}
-        for key in accepted_keys:
-            if key not in payload:
-                continue
-            value = payload.get(key, "")
-            if not isinstance(value, str):
-                self.send_error(HTTPStatus.BAD_REQUEST, "Settings values must be strings")
-                return
-            updates[key] = value
-        settings = storage.set_app_secrets(**updates)
-        self.send_json(settings)
+        self.send_error(HTTPStatus.GONE, "Global security settings were replaced by users")
 
     def handle_user_save(self) -> None:
         payload = self.parse_json_body()
@@ -809,7 +826,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         if workspace is not None and storage.workspace_delete_uses_super_password(password):
             logger.warning(
-                "Workspace deleted with super password: workspace_id=%s workspace_name=%s client_ip=%s",
+                "Workspace deleted with privileged user password: workspace_id=%s workspace_name=%s client_ip=%s",
                 workspace_id,
                 workspace.get("name", ""),
                 self.client_address[0],
@@ -854,7 +871,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if auth.access_code_is_configured():
             if auth.api_key_is_valid(self):
                 return config.DEFAULT_WORKSPACE_ID
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Access code required")
+            self.send_error(HTTPStatus.UNAUTHORIZED, "Login required")
             return None
 
         return config.DEFAULT_WORKSPACE_ID

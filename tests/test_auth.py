@@ -1,15 +1,14 @@
 import json
 
-from dassiedrop import auth, config, state
+from dassiedrop import auth, config, state, storage
 
 import app
 from tests.support import CoreStateTestCase, make_app_handler
 
 
 class AuthTests(CoreStateTestCase):
-    def test_access_code_blocks_unauthorised_access_and_allows_valid_access(self) -> None:
-        config.ACCESS_CODE = "secret-code"
-        config.API_KEY = "api-secret"
+    def test_user_auth_blocks_unauthorised_access_and_allows_valid_api_key(self) -> None:
+        storage.set_user("admin", password="secret-pass", api_key="api-secret", role="root")
 
         unauthorized_handler = make_app_handler(headers={})
         self.assertFalse(auth.is_authorized(unauthorized_handler))
@@ -17,26 +16,23 @@ class AuthTests(CoreStateTestCase):
         authorized_handler = make_app_handler(headers={"X-API-Key": "api-secret"})
         self.assertTrue(auth.is_authorized(authorized_handler))
 
-        access_code_handler = make_app_handler(headers={"X-API-Key": "secret-code"})
-        self.assertFalse(auth.is_authorized(access_code_handler))
+        password_handler = make_app_handler(headers={"X-API-Key": "secret-pass"})
+        self.assertFalse(auth.is_authorized(password_handler))
+        self.assertIsNotNone(auth.login_user("admin", "secret-pass"))
+        self.assertIsNone(auth.login_user("admin", "wrong"))
 
-    def test_x_api_key_falls_back_to_access_code_when_api_key_is_unset(self) -> None:
-        config.ACCESS_CODE = "secret-code"
-        config.API_KEY = ""
+    def test_x_api_key_does_not_fallback_to_user_password(self) -> None:
+        storage.set_user("admin", password="secret-pass", api_key="", role="root")
 
-        authorized_handler = make_app_handler(headers={"X-API-Key": "secret-code"})
-        self.assertTrue(auth.is_authorized(authorized_handler))
+        authorized_handler = make_app_handler(headers={"X-API-Key": "secret-pass"})
+        self.assertFalse(auth.is_authorized(authorized_handler))
 
-    def test_hashed_settings_access_code_and_api_key_authorize_requests(self) -> None:
-        app.set_app_secrets(access_code="stored-code", api_key="stored-api")
-
-        unauthorized_handler = make_app_handler(headers={})
-        self.assertFalse(auth.is_authorized(unauthorized_handler))
-
+    def test_user_api_key_authorizes_requests(self) -> None:
+        storage.set_user("admin", password="stored-pass", api_key="stored-api", role="root")
         api_handler = make_app_handler(headers={"X-API-Key": "stored-api"})
+
         self.assertTrue(auth.is_authorized(api_handler))
-        self.assertTrue(auth.access_code_is_valid("stored-code"))
-        self.assertFalse(auth.access_code_is_valid("wrong"))
+        self.assertFalse(auth.access_code_is_valid("stored-pass"))
 
     def test_password_protected_items_require_correct_password(self) -> None:
         app.add_text_entry("classified", hidden=True, password="vault")

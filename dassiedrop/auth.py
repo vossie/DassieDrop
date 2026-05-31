@@ -65,37 +65,61 @@ def is_authorized(handler: BaseHTTPRequestHandler) -> bool:
 
 
 def access_code_is_configured() -> bool:
-    return bool(config.ACCESS_CODE or storage.get_app_settings().get("access_code_hash"))
+    return bool(storage.list_users())
 
 
 def access_code_is_valid(code: str) -> bool:
-    candidate = code.strip()
-    settings = storage.get_app_settings()
-    access_code_hash = settings.get("access_code_hash")
-    if access_code_hash:
-        return storage.secret_matches_hash(candidate, access_code_hash)
-    return bool(config.ACCESS_CODE) and bool(candidate) and hmac.compare_digest(candidate, config.ACCESS_CODE)
+    return False
+
+
+def login_user(username: str, password: str) -> dict | None:
+    return storage.authenticate_user(username, password)
 
 
 def api_key_is_valid(handler: BaseHTTPRequestHandler) -> bool:
     api_key = handler.headers.get("X-API-Key", "").strip()
     if not api_key:
         return False
-    settings = storage.get_app_settings()
-    api_key_hash = settings.get("api_key_hash")
-    if api_key_hash:
-        return storage.secret_matches_hash(api_key, api_key_hash)
-    if config.API_KEY:
-        return hmac.compare_digest(api_key, config.API_KEY)
-    return access_code_is_valid(api_key)
+    return storage.api_key_user(api_key) is not None
 
 
-def create_authorized_session(workspace_id: str | None = None) -> str:
+def current_user(handler: BaseHTTPRequestHandler) -> dict | None:
+    api_key = handler.headers.get("X-API-Key", "").strip()
+    if api_key:
+        user = storage.api_key_user(api_key)
+        if user is not None:
+            return user
+    _, session = get_session(handler)
+    if session is None:
+        return None
+    return {
+        "id": session.get("user_id"),
+        "username": session.get("username"),
+        "role": session.get("role"),
+    }
+
+
+def user_has_role(handler: BaseHTTPRequestHandler, roles: set[str]) -> bool:
+    user = current_user(handler)
+    if user is None:
+        return False
+    return storage.normalize_user_role(user.get("role")) in roles
+
+
+def create_authorized_session(
+    workspace_id: str | None = None,
+    user_id: str | None = None,
+    username: str | None = None,
+    role: str | None = None,
+) -> str:
     session_id = make_session_id()
     now = config.now_ts()
     with state.session_lock:
         state.authorized_sessions[session_id] = {
             "workspace_id": workspace_id,
+            "user_id": user_id,
+            "username": username,
+            "role": role,
             "csrf_token": secrets.token_urlsafe(24),
             "created_at": now,
             "last_seen_at": now,

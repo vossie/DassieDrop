@@ -1,4 +1,5 @@
-const accessCode = document.getElementById("accessCode");
+const loginUsername = document.getElementById("loginUsername");
+const loginPassword = document.getElementById("loginPassword");
 const loginBtn = document.getElementById("loginBtn");
 const loginStatus = document.getElementById("loginStatus");
 
@@ -8,10 +9,10 @@ async function login() {
     const response = await fetch("/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: accessCode.value })
+      body: JSON.stringify({ username: loginUsername.value, password: loginPassword.value })
     });
     if (!response.ok) {
-      loginStatus.textContent = "Wrong access code.";
+      loginStatus.textContent = "Wrong username or password.";
       return;
     }
     window.location.href = "/?workspace_hint=1";
@@ -21,7 +22,12 @@ async function login() {
 }
 
 loginBtn.addEventListener("click", login);
-accessCode.addEventListener("keydown", (event) => {
+loginUsername.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    loginPassword.focus();
+  }
+});
+loginPassword.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     login();
   }

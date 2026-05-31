@@ -10,10 +10,11 @@
 <body>
 <main class="card">
   <img class="login-brand" src="/assets/dassiedrop_horizontal_tight.png" alt="DassieDrop">
-  <h1>Access Code</h1>
-  <p>Enter the shared access code to use this page from another browser on your network.</p>
-  <input id="accessCode" type="password" placeholder="Access code" autofocus>
-  <button id="loginBtn" type="button">Unlock</button>
+  <h1>Sign In</h1>
+  <p>Enter your DassieDrop username and password.</p>
+  <input id="loginUsername" type="text" placeholder="Username" autocomplete="username" autofocus>
+  <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="loginBtn" type="button">Sign In</button>
   <div class="error" id="loginStatus"></div>
 </main>
 <script src="/assets/login.js"></script>

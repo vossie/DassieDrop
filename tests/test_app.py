@@ -47,20 +47,14 @@ class AppStateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.original_upload_dir = config.UPLOAD_DIR
-        self.original_access_code = config.ACCESS_CODE
-        self.original_api_key = config.API_KEY
         self.original_share_base_url = config.SHARE_BASE_URL
-        self.original_workspace_super_password = config.WORKSPACE_SUPER_PASSWORD
         self.original_now_ts = config.now_ts
         self.original_version_file = config.VERSION_FILE
         self.original_update_check_enabled = config.UPDATE_CHECK_ENABLED
         self.original_update_check_url = config.UPDATE_CHECK_URL
         self.original_update_check_interval_seconds = config.UPDATE_CHECK_INTERVAL_SECONDS
         config.UPLOAD_DIR = Path(self.temp_dir.name) / "uploads"
-        config.ACCESS_CODE = ""
-        config.API_KEY = ""
         config.SHARE_BASE_URL = ""
-        config.WORKSPACE_SUPER_PASSWORD = ""
         config.UPDATE_CHECK_ENABLED = False
         config.UPDATE_CHECK_URL = "https://example.invalid/VERSION"
         config.UPDATE_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
@@ -74,10 +68,7 @@ class AppStateTests(unittest.TestCase):
     def tearDown(self) -> None:
         reset_app_state()
         config.UPLOAD_DIR = self.original_upload_dir
-        config.ACCESS_CODE = self.original_access_code
-        config.API_KEY = self.original_api_key
         config.SHARE_BASE_URL = self.original_share_base_url
-        config.WORKSPACE_SUPER_PASSWORD = self.original_workspace_super_password
         config.UPDATE_CHECK_ENABLED = self.original_update_check_enabled
         config.UPDATE_CHECK_URL = self.original_update_check_url
         config.UPDATE_CHECK_INTERVAL_SECONDS = self.original_update_check_interval_seconds
@@ -410,35 +401,35 @@ class AppStateTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(message, "")
 
-        config.WORKSPACE_SUPER_PASSWORD = "override"
+        storage.set_user("Admin", password="override", api_key="override-api", role="admin")
         deleted, delete_message = app.delete_workspace(workspace["id"], password="override")
         self.assertTrue(deleted)
         self.assertEqual(delete_message, "")
         self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
 
-    def test_can_enter_workspace_with_env_super_password(self) -> None:
+    def test_can_enter_workspace_with_admin_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
-        config.WORKSPACE_SUPER_PASSWORD = "override"
+        storage.set_user("Admin", password="override", api_key="override-api", role="admin")
 
         ok, message = app.enter_workspace(session_id, workspace["id"], password="override")
 
         self.assertTrue(ok)
         self.assertEqual(message, "")
 
-    def test_can_enter_workspace_with_stored_super_password(self) -> None:
+    def test_can_enter_workspace_with_root_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
         session_id = app.create_authorized_session()
-        app.set_app_secrets(workspace_super_password="stored-override")
+        storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
 
         ok, message = app.enter_workspace(session_id, workspace["id"], password="stored-override")
 
         self.assertTrue(ok)
         self.assertEqual(message, "")
 
-    def test_can_delete_workspace_with_stored_super_password(self) -> None:
+    def test_can_delete_workspace_with_root_user_password(self) -> None:
         workspace = app.create_workspace("Secure", password="vault")
-        app.set_app_secrets(workspace_super_password="stored-override")
+        storage.set_user("Root", password="stored-override", api_key="root-api", role="root")
 
         deleted, delete_message = app.delete_workspace(workspace["id"], password="stored-override")
 
@@ -465,10 +456,7 @@ class AppStateTests(unittest.TestCase):
 
         self.assertEqual(user["role"], "user")
 
-    def test_startup_bootstraps_root_user_from_env_access_code_and_api_key(self) -> None:
-        config.ACCESS_CODE = "app-code"
-        config.API_KEY = "automation-key"
-
+    def test_startup_bootstraps_default_root_user(self) -> None:
         app.load_persisted_workspaces()
 
         users = storage.read_shelved_users()
@@ -476,26 +464,10 @@ class AppStateTests(unittest.TestCase):
         user = next(iter(users.values()))
         self.assertEqual(user["username"], "admin")
         self.assertEqual(user["role"], "root")
-        self.assertTrue(app.verify_password("app-code", user["password_hash"]))
-        self.assertTrue(app.verify_password("automation-key", user["api_key_hash"]))
-
-    def test_startup_bootstraps_root_user_from_stored_settings_hashes(self) -> None:
-        app.set_app_secrets(access_code="stored-code", api_key="stored-api")
-        with state.state_lock:
-            state.shared_state["users"] = {}
-
-        app.load_persisted_workspaces()
-
-        users = storage.read_shelved_users()
-        self.assertEqual(len(users), 1)
-        user = next(iter(users.values()))
-        self.assertEqual(user["username"], "admin")
-        self.assertEqual(user["role"], "root")
-        self.assertTrue(app.verify_password("stored-code", user["password_hash"]))
-        self.assertTrue(app.verify_password("stored-api", user["api_key_hash"]))
+        self.assertTrue(app.verify_password("password", user["password_hash"]))
+        self.assertTrue(app.verify_password("password", user["api_key_hash"]))
 
     def test_startup_does_not_bootstrap_when_root_user_exists(self) -> None:
-        config.ACCESS_CODE = "app-code"
         existing = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
 
         app.load_persisted_workspaces()
@@ -547,10 +519,7 @@ class HttpServerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.original_upload_dir = config.UPLOAD_DIR
-        self.original_access_code = config.ACCESS_CODE
-        self.original_api_key = config.API_KEY
         self.original_share_base_url = config.SHARE_BASE_URL
-        self.original_workspace_super_password = config.WORKSPACE_SUPER_PASSWORD
         self.original_now_ts = config.now_ts
         self.original_version_file = config.VERSION_FILE
         self.original_update_check_enabled = config.UPDATE_CHECK_ENABLED
@@ -566,10 +535,7 @@ class HttpServerTests(unittest.TestCase):
         )
         self.current_time = 1_700_100_000.0
         config.UPLOAD_DIR = Path(self.temp_dir.name) / "uploads"
-        config.ACCESS_CODE = ""
-        config.API_KEY = ""
         config.SHARE_BASE_URL = ""
-        config.WORKSPACE_SUPER_PASSWORD = ""
         config.UPDATE_CHECK_ENABLED = False
         config.UPDATE_CHECK_URL = "https://example.invalid/VERSION"
         config.UPDATE_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
@@ -593,10 +559,7 @@ class HttpServerTests(unittest.TestCase):
             self.thread.join(timeout=5)
         reset_app_state()
         config.UPLOAD_DIR = self.original_upload_dir
-        config.ACCESS_CODE = self.original_access_code
-        config.API_KEY = self.original_api_key
         config.SHARE_BASE_URL = self.original_share_base_url
-        config.WORKSPACE_SUPER_PASSWORD = self.original_workspace_super_password
         config.UPDATE_CHECK_ENABLED = self.original_update_check_enabled
         config.UPDATE_CHECK_URL = self.original_update_check_url
         config.UPDATE_CHECK_INTERVAL_SECONDS = self.original_update_check_interval_seconds
@@ -616,9 +579,14 @@ class HttpServerTests(unittest.TestCase):
         return self.current_time
 
     def start_server(self, access_code: str = "", api_key: str = "") -> None:
-        config.ACCESS_CODE = access_code
-        config.API_KEY = api_key
         reset_app_state()
+        if access_code:
+            storage.set_user(
+                "admin",
+                password=access_code,
+                api_key=api_key or access_code,
+                role="root",
+            )
         app.start_background_tasks()
         self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.AppHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -641,6 +609,17 @@ class HttpServerTests(unittest.TestCase):
         }
         connection.close()
         return result
+
+    def root_cookie(self, username: str = "admin", password: str = "password") -> str:
+        storage.set_user(username, password=password, api_key="root-api", role="root")
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": username, "password": password}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        return login["headers"]["Set-Cookie"].split(";", 1)[0]
 
     def select_workspace(self, cookie: str, workspace: str = app.DEFAULT_WORKSPACE_ID, password: str = ""):
         page = self.request("GET", "/workspaces", headers={"Cookie": cookie})
@@ -971,25 +950,21 @@ class HttpServerTests(unittest.TestCase):
 
         self.assertEqual(response["status"], 400)
 
-    def test_settings_page_and_api_update_hashed_secrets(self) -> None:
+    def test_settings_page_reports_user_managed_security(self) -> None:
         self.start_server()
+        cookie = self.root_cookie()
 
-        page = self.request("GET", "/settings")
+        page = self.request("GET", "/settings", headers={"Cookie": cookie})
         self.assertEqual(page["status"], 200)
         self.assertIn("DassieDrop Settings", page["text"])
-        cookie = page["headers"]["Set-Cookie"].split(";", 1)[0]
+        self.assertIn("Security is managed through users", page["text"])
+        self.assertNotIn("settingsAccessCode", page["text"])
         token = page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
         response = self.request(
             "POST",
             "/api/settings",
-            body=json.dumps(
-                {
-                    "access_code": "stored-code",
-                    "api_key": "stored-api",
-                    "workspace_super_password": "stored-super",
-                }
-            ).encode("utf-8"),
+            body=json.dumps({"access_code": "stored-code"}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": cookie,
@@ -997,19 +972,11 @@ class HttpServerTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response["status"], 200)
-        payload = json.loads(response["body"])
-        self.assertTrue(payload["access_code_configured"])
-        self.assertTrue(payload["api_key_configured"])
-        self.assertTrue(payload["workspace_super_password_configured"])
-        settings = app.get_app_settings()
-        self.assertTrue(app.verify_password("stored-code", settings["access_code_hash"]))
-        self.assertTrue(app.verify_password("stored-api", settings["api_key_hash"]))
-        self.assertTrue(app.verify_password("stored-super", settings["workspace_super_password_hash"]))
+        self.assertEqual(response["status"], 410)
 
-    def test_settings_access_code_is_used_for_login(self) -> None:
+    def test_user_password_is_used_for_login(self) -> None:
         self.start_server()
-        app.set_app_secrets(access_code="stored-code")
+        storage.set_user("admin", password="stored-pass", api_key="stored-api", role="root")
 
         blocked = self.request("GET", "/api/state")
         self.assertEqual(blocked["status"], 401)
@@ -1017,7 +984,7 @@ class HttpServerTests(unittest.TestCase):
         login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "stored-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "stored-pass"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
@@ -1025,18 +992,40 @@ class HttpServerTests(unittest.TestCase):
 
     def test_users_pages_and_api_store_hashed_user_secrets(self) -> None:
         self.start_server()
+        cookie = self.root_cookie()
 
-        users_page = self.request("GET", "/users")
+        users_page = self.request("GET", "/users", headers={"Cookie": cookie})
         self.assertEqual(users_page["status"], 200)
         self.assertIn("DassieDrop Users", users_page["text"])
         self.assertIn('href="/users/new"', users_page["text"])
         self.assertNotIn("cancelEditUserBtn", users_page["text"])
-        cookie = users_page["headers"]["Set-Cookie"].split(";", 1)[0]
 
         new_user_page = self.request("GET", "/users/new", headers={"Cookie": cookie})
         self.assertEqual(new_user_page["status"], 200)
         self.assertIn("DassieDrop Add User", new_user_page["text"])
         token = new_user_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        initial_root_id = next(iter(storage.read_shelved_users()))
+        blocked_update = self.request(
+            "POST",
+            f"/api/users/{initial_root_id}",
+            body=json.dumps({"username": "admin", "role": "admin"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_update["status"], 400)
+        blocked_delete = self.request(
+            "DELETE",
+            f"/api/users/{initial_root_id}",
+            headers={
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_delete["status"], 400)
 
         response = self.request(
             "POST",
@@ -1068,27 +1057,6 @@ class HttpServerTests(unittest.TestCase):
         stored = users[payload["user"]["id"]]
         self.assertTrue(app.verify_password("secret-pass", stored["password_hash"]))
         self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
-
-        blocked_update = self.request(
-            "POST",
-            f"/api/users/{payload['user']['id']}",
-            body=json.dumps({"username": "alice", "role": "admin"}).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Cookie": cookie,
-                "X-CSRF-Token": token,
-            },
-        )
-        self.assertEqual(blocked_update["status"], 400)
-        blocked_delete = self.request(
-            "DELETE",
-            f"/api/users/{payload['user']['id']}",
-            headers={
-                "Cookie": cookie,
-                "X-CSRF-Token": token,
-            },
-        )
-        self.assertEqual(blocked_delete["status"], 400)
 
         second_root = self.request(
             "POST",
@@ -1151,9 +1119,10 @@ class HttpServerTests(unittest.TestCase):
 
         self.assertEqual(delete_response["status"], 200)
         remaining_users = json.loads(delete_response["body"])["users"]
-        self.assertEqual(len(remaining_users), 1)
-        self.assertEqual(remaining_users[0]["username"], "backup")
-        self.assertEqual(remaining_users[0]["role"], "root")
+        self.assertEqual(len(remaining_users), 2)
+        remaining_by_username = {user["username"]: user for user in remaining_users}
+        self.assertEqual(remaining_by_username["admin"]["role"], "root")
+        self.assertEqual(remaining_by_username["backup"]["role"], "root")
 
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()
@@ -1222,14 +1191,13 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(third["status"], 429)
         self.assertEqual(third["headers"]["Retry-After"], "60")
 
-    def test_workspace_delete_logs_super_password_usage(self) -> None:
+    def test_workspace_delete_logs_privileged_user_password_usage(self) -> None:
         self.start_server()
-        config.WORKSPACE_SUPER_PASSWORD = "override"
+        cookie = self.root_cookie(password="override")
         workspace = app.create_workspace("Secure", password="vault")
 
-        workspace_page = self.request("GET", "/workspaces")
+        workspace_page = self.request("GET", "/workspaces", headers={"Cookie": cookie})
         self.assertEqual(workspace_page["status"], 200)
-        cookie = workspace_page["headers"]["Set-Cookie"].split(";", 1)[0]
         token = workspace_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
         with self.assertLogs("dassiedrop.http", level="WARNING") as captured:
@@ -1247,7 +1215,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(response["status"], 200)
         self.assertTrue(
             any(
-                "Workspace deleted with super password" in message and workspace["id"] in message
+                "Workspace deleted with privileged user password" in message and workspace["id"] in message
                 for message in captured.output
             )
         )
@@ -1903,12 +1871,12 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(blocked_without_entry["status"], 401)
 
-    def test_access_code_is_enforced_and_login_unlocks_api(self) -> None:
+    def test_user_login_is_enforced_and_unlocks_api(self) -> None:
         self.start_server(access_code="secret-code")
 
         home = self.request("GET", "/")
         self.assertEqual(home["status"], 200)
-        self.assertIn("Access Code", home["text"])
+        self.assertIn("Username", home["text"])
 
         unauthorized = self.request("GET", "/api/state")
         self.assertEqual(unauthorized["status"], 401)
@@ -1916,7 +1884,7 @@ class HttpServerTests(unittest.TestCase):
         wrong_login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "wrong"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(wrong_login["status"], 401)
@@ -1924,7 +1892,7 @@ class HttpServerTests(unittest.TestCase):
         login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "secret-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(login["status"], 200)
@@ -1992,13 +1960,13 @@ class HttpServerTests(unittest.TestCase):
         authorized = self.request("GET", "/api/state", headers={"X-API-Key": "api-secret"})
         self.assertEqual(authorized["status"], 200)
 
-    def test_browser_login_still_uses_access_code_when_separate_api_key_is_configured(self) -> None:
+    def test_browser_login_uses_user_password_when_api_key_is_configured(self) -> None:
         self.start_server(access_code="secret-code", api_key="api-secret")
 
         wrong_login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "api-secret"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "api-secret"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(wrong_login["status"], 401)
@@ -2006,7 +1974,7 @@ class HttpServerTests(unittest.TestCase):
         login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "secret-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(login["status"], 200)
@@ -2048,7 +2016,7 @@ class HttpServerTests(unittest.TestCase):
         login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "secret-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(login["status"], 200)
@@ -2168,7 +2136,7 @@ class HttpServerTests(unittest.TestCase):
         login = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "secret-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(login["status"], 200)
@@ -2346,7 +2314,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('done < "${ENV_FILE}"', script)
         self.assertIn('export "${key}=${value}"', script)
         self.assertIn('export HTTPS_PORT="${HTTPS_PORT_OVERRIDE}"', script)
-        self.assertIn('API_KEY=', (REPO_ROOT / "scripts" / "install-ubuntu-service.sh").read_text(encoding="utf-8"))
+        self.assertIn('SHARE_BASE_URL=${SHARE_BASE_URL_VALUE}', (REPO_ROOT / "scripts" / "install-ubuntu-service.sh").read_text(encoding="utf-8"))
 
     def test_github_ubuntu_install_upgrade_script_has_valid_bash_syntax(self) -> None:
         result = subprocess.run(
@@ -2392,14 +2360,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('ensure_package python3.11 python3.11', script)
         self.assertIn('HTTPS_VALUE="${HTTPS:-1}"', script)
         self.assertIn('HTTPS_PORT_VALUE="${HTTPS_PORT:-8443}"', script)
-        self.assertIn('API_KEY_VALUE="${API_KEY:-}"', script)
-        self.assertIn('ACCESS_CODE_VALUE="${ACCESS_CODE:-}"', script)
-        self.assertIn('resolve_secret "ACCESS_CODE_VALUE" "ACCESS_CODE"', script)
-        self.assertIn('resolve_secret "API_KEY_VALUE" "API_KEY"', script)
+        self.assertNotIn("ACCESS_CODE", script)
+        self.assertNotIn("API_KEY", script)
         self.assertIn('UPDATE_CHECK_ENABLED_VALUE="${UPDATE_CHECK_ENABLED:-}"', script)
         self.assertIn('resolve_update_check_enabled "${UPDATE_CHECK_ENABLED_VALUE}"', script)
         self.assertIn('read -r -p "Enable daily update checks? [y/N]: " answer </dev/tty', script)
-        self.assertIn('Generated API_KEY:', script)
         self.assertIn('UPDATE_CHECK_ENABLED=${UPDATE_CHECK_ENABLED_VALUE}', script)
         self.assertIn('HTTPS_CERT_FILE=${HTTPS_CERT_FILE_VALUE}', script)
         self.assertIn('done < "${ENV_FILE}"', script)
@@ -2434,14 +2399,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('APP_DIR}/templates', script)
         self.assertIn('apt-get install -y python3.11', script)
         self.assertIn('apt-get install -y openssl', script)
-        self.assertIn('API_KEY=${API_KEY_VALUE}', script)
-        self.assertIn('ACCESS_CODE_VALUE="${ACCESS_CODE:-}"', script)
-        self.assertIn('resolve_secret "ACCESS_CODE_VALUE" "ACCESS_CODE"', script)
-        self.assertIn('resolve_secret "API_KEY_VALUE" "API_KEY"', script)
+        self.assertNotIn("ACCESS_CODE", script)
+        self.assertNotIn("API_KEY", script)
         self.assertIn('UPDATE_CHECK_ENABLED_VALUE="${UPDATE_CHECK_ENABLED:-}"', script)
         self.assertIn('resolve_update_check_enabled "${UPDATE_CHECK_ENABLED_VALUE}"', script)
         self.assertIn('read -r -p "Enable daily update checks? [y/N]: " answer </dev/tty', script)
-        self.assertIn('Generated ACCESS_CODE:', script)
         self.assertIn('UPDATE_CHECK_ENABLED=${UPDATE_CHECK_ENABLED_VALUE}', script)
         self.assertIn('HTTPS_VALUE="${HTTPS:-1}"', script)
         self.assertIn('HTTPS_PORT=${HTTPS_PORT_VALUE}', script)
@@ -2496,8 +2458,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("build: .", compose)
         self.assertIn('${HTTPS_PORT:-8443}:8443', compose)
         self.assertIn("dassiedrop-data:/data", compose)
-        self.assertIn("ACCESS_CODE:", compose)
-        self.assertIn("API_KEY:", compose)
+        self.assertNotIn("ACCESS_CODE:", compose)
+        self.assertNotIn("API_KEY:", compose)
         self.assertIn("SHARE_BASE_URL:", compose)
         self.assertIn("HTTPS:", compose)
         self.assertIn("HTTPS_CERT_FILE:", compose)
@@ -2524,7 +2486,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("docker-compose.proxy.yml", install_doc)
         self.assertIn("docker/Caddyfile", install_doc)
         self.assertIn("## Run With HTTPS", install_doc)
-        self.assertIn("ACCESS_CODE=my-secret-code API_KEY=my-api-key ./.venv/bin/python app.py", install_doc)
+        self.assertIn("admin` with password `password", install_doc)
         self.assertIn("http://localhost:8000", install_doc)
         self.assertIn("https://localhost:8443", install_doc)
         self.assertIn("## Use Your Own SSL Certificate", install_doc)
@@ -2536,7 +2498,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("sudo HTTPS=0 bash", install_doc)
         self.assertIn("master/scripts/github-ubuntu-install-upgrade.sh", install_doc)
         self.assertIn("master/scripts/github-centos-stream-install-upgrade.sh", install_doc)
-        self.assertIn("API_KEY=my-api-key", install_doc)
+        self.assertNotIn("ACCESS_CODE=", install_doc)
+        self.assertNotIn("API_KEY=", install_doc)
         self.assertIn("--silent", install_doc)
         self.assertIn("UPDATE_CHECK_ENABLED", install_doc)
 

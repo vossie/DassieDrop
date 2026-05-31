@@ -176,14 +176,14 @@ curl -sS \
   http://127.0.0.1:8000/api/share-file
 ```
 
-## Access Code
+## API Key
 
-If DassieDrop is protected, the simplest bash option is to send the automation secret as `X-API-Key`. If `API_KEY` is configured, use that. Otherwise `X-API-Key` falls back to `ACCESS_CODE`:
+If DassieDrop is protected, send a user's automation key as `X-API-Key`:
 
 ```bash
 curl -sS \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -X POST \
   -d '{"text":"hello again"}' \
   http://127.0.0.1:8000/api/share-text
@@ -193,18 +193,18 @@ You can do the same for file uploads:
 
 ```bash
 curl -sS \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -X POST \
   -F 'file=@./example.txt' \
   http://127.0.0.1:8000/api/share-file
 ```
 
-And combine access code plus workspace targeting:
+And combine API key plus workspace targeting:
 
 ```bash
 curl -sS \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -H 'X-Workspace: ops-desk' \
   -X POST \
   -d '{"text":"hello again"}' \

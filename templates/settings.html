@@ -41,65 +41,25 @@
   <section class="grid">
     <article class="panel tab-panel workspace-panel">
       <div class="panel-title">
-        <h2>Security Settings</h2>
-        <div class="meta">Leave a field blank to keep its current value. Use the clear checkbox to remove a stored setting.</div>
+        <h2>Settings</h2>
+        <div class="meta">Security is managed through users. Root users can manage settings and users.</div>
       </div>
-      <div class="settings-form">
-        <label class="settings-field" for="settingsAccessCode">
-          <span class="settings-label-row">
-            <span>App access code</span>
-            <span class="settings-help" tabindex="0" aria-label="App access code help" data-tooltip="Controls browser login for the DassieDrop web app. Users must enter this code before opening protected app pages.">?</span>
-          </span>
-          <input id="settingsAccessCode" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New access code">
-        </label>
-        <label class="checkbox-row settings-clear-row" for="clearAccessCode">
-          <input id="clearAccessCode" type="checkbox">
-          <span>Clear stored app access code</span>
-        </label>
-
-        <label class="settings-field" for="settingsApiKey">
-          <span class="settings-label-row">
-            <span>API key</span>
-            <span class="settings-help" tabindex="0" aria-label="API key help" data-tooltip="Authenticates automation clients and scripts that call protected API routes with the X-API-Key header.">?</span>
-          </span>
-          <input id="settingsApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New API key">
-        </label>
-        <label class="checkbox-row settings-clear-row" for="clearApiKey">
-          <input id="clearApiKey" type="checkbox">
-          <span>Clear stored API key</span>
-        </label>
-
-        <label class="settings-field" for="settingsSuperPassword">
-          <span class="settings-label-row">
-            <span>Workspace super password</span>
-            <span class="settings-help" tabindex="0" aria-label="Workspace super password help" data-tooltip="Lets an admin enter or delete any protected workspace without knowing that workspace's own password.">?</span>
-          </span>
-          <input id="settingsSuperPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New super password">
-        </label>
-        <label class="checkbox-row settings-clear-row" for="clearSuperPassword">
-          <input id="clearSuperPassword" type="checkbox">
-          <span>Clear stored workspace super password</span>
-        </label>
-
-        <button id="saveSettingsBtn" type="button">Save Settings</button>
-      </div>
-      <div class="status" id="settingsStatus"></div>
       <dl class="settings-summary">
         <div>
-          <dt>App access code</dt>
-          <dd id="accessCodeState">Loading</dd>
+          <dt>Browser login</dt>
+          <dd>User password</dd>
         </div>
         <div>
-          <dt>API key</dt>
-          <dd id="apiKeyState">Loading</dd>
+          <dt>Automation API</dt>
+          <dd>User API key via <code>X-API-Key</code></dd>
         </div>
         <div>
-          <dt>Workspace super password</dt>
-          <dd id="superPasswordState">Loading</dd>
+          <dt>Workspace override</dt>
+          <dd>Root or admin user password</dd>
         </div>
         <div>
-          <dt>PBKDF2 iterations</dt>
-          <dd id="hashIterationsState">Loading</dd>
+          <dt>User management</dt>
+          <dd><a class="footer-link" href="/users">Open Users</a></dd>
         </div>
       </dl>
     </article>
@@ -125,6 +85,5 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
-<script src="/assets/settings.js"></script>
 </body>
 </html>

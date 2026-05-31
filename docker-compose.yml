@@ -6,8 +6,6 @@ services:
       - "${PORT:-8000}:8000"
       - "${HTTPS_PORT:-8443}:8443"
     environment:
-      ACCESS_CODE: "${ACCESS_CODE:-change-me}"
-      API_KEY: "${API_KEY:-}"
       SHARE_BASE_URL: "${SHARE_BASE_URL:-}"
       APP_VERSION: "${APP_VERSION:-}"
       HTTPS: "${HTTPS:-0}"

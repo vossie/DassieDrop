@@ -17,7 +17,7 @@ Usage: github-ubuntu-install-upgrade.sh [--port PORT] [--https-port PORT] [--sil
 Options:
   --port PORT        Set the DassieDrop HTTP listen port for install or upgrade.
   --https-port PORT  Set the DassieDrop HTTPS listen port for install or upgrade.
-  --silent           Generate missing ACCESS_CODE and API_KEY values automatically.
+  --silent           Use noninteractive defaults.
   --help        Show this help.
 EOF
 }
