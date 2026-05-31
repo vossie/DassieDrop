@@ -3175,8 +3175,11 @@ class ScriptTests(unittest.TestCase):
         users_template = (REPO_ROOT / "templates" / "users.html").read_text(
             encoding="utf-8"
         )
+        stylesheet = (REPO_ROOT / "assets" / "app.css").read_text(encoding="utf-8")
         self.assertIn("Create Workspace", template)
         self.assertIn('id="workspaceAccessMode"', template)
+        self.assertLess(template.index('id="workspaceAccessMode"'), template.index('id="createWorkspaceBtn"'))
+        self.assertIn(".workspace-create-submit", stylesheet)
         self.assertIn('id="workspaceMessageExpiry"', template)
         self.assertIn('value="explicit"', template)
         self.assertIn('fetch("/api/workspaces")', script)
@@ -3186,7 +3189,6 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("message_expiry_seconds: messageExpirySeconds", script)
         self.assertIn("__MANAGE_ACCESS_LINK__", index)
         self.assertIn("__MANAGE_ACCESS_HEADER_LINK__", index)
-        stylesheet = (REPO_ROOT / "assets" / "app.css").read_text(encoding="utf-8")
         self.assertIn(".tabs-access-link", stylesheet)
         self.assertIn(".header-access-link", stylesheet)
         self.assertIn(".header-lock-icon", stylesheet)

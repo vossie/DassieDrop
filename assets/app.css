@@ -1064,6 +1064,10 @@ input[type="file"] {
 .workspace-create-row .password-field-wrap {
   width: 100%;
 }
+.workspace-create-submit {
+  flex: 0 0 100%;
+  width: fit-content;
+}
 .workspace-auth-row {
   display: flex;
   flex-wrap: wrap;
