@@ -133,6 +133,8 @@ Run DassieDrop on:
 
 Perfect for quick use or locked-down machines.
 
+Requires Python 3.11 or newer.
+
 ```bash
 git clone https://github.com/vossie/DassieDrop.git
 cd DassieDrop
