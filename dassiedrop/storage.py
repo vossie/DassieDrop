@@ -615,6 +615,49 @@ def list_users() -> list[dict]:
         return [serialize_user(user) for user in users]
 
 
+def root_user_exists_locked() -> bool:
+    return any(normalize_user_role(user.get("role")) == "root" for user in get_users_locked().values())
+
+
+def app_access_code_hash(settings: dict | None = None) -> str | None:
+    source = settings if settings is not None else get_app_settings()
+    if config.ACCESS_CODE:
+        return hash_password(config.ACCESS_CODE)
+    configured_hash = source.get("access_code_hash") if isinstance(source, dict) else None
+    return configured_hash if isinstance(configured_hash, str) and configured_hash else None
+
+
+def app_api_key_hash(settings: dict | None = None, fallback_hash: str | None = None) -> str | None:
+    source = settings if settings is not None else get_app_settings()
+    if config.API_KEY:
+        return hash_password(config.API_KEY)
+    configured_hash = source.get("api_key_hash") if isinstance(source, dict) else None
+    if isinstance(configured_hash, str) and configured_hash:
+        return configured_hash
+    return fallback_hash
+
+
+def ensure_bootstrap_root_user_locked() -> bool:
+    if root_user_exists_locked():
+        return False
+    settings = get_app_settings_locked()
+    password_hash = app_access_code_hash(settings)
+    if not password_hash:
+        return False
+    now = config.now_ts()
+    user_id = make_user_id()
+    get_users_locked()[user_id] = {
+        "id": user_id,
+        "username": "admin",
+        "role": "root",
+        "password_hash": password_hash,
+        "api_key_hash": app_api_key_hash(settings, fallback_hash=password_hash),
+        "created_at": now,
+        "updated_at": now,
+    }
+    return True
+
+
 def find_user_by_username_locked(username: str) -> dict | None:
     username_key = normalize_username(username).lower()
     if not username_key:
@@ -970,6 +1013,7 @@ def load_persisted_workspaces() -> None:
         reset_shared_state_locked(loaded_workspaces)
         state.shared_state["app_settings"] = settings
         state.shared_state["users"] = users
+        ensure_bootstrap_root_user_locked()
         ensure_default_workspace_locked()
         persist_workspaces_locked()
 

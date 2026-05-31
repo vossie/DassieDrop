@@ -465,6 +465,46 @@ class AppStateTests(unittest.TestCase):
 
         self.assertEqual(user["role"], "user")
 
+    def test_startup_bootstraps_root_user_from_env_access_code_and_api_key(self) -> None:
+        config.ACCESS_CODE = "app-code"
+        config.API_KEY = "automation-key"
+
+        app.load_persisted_workspaces()
+
+        users = storage.read_shelved_users()
+        self.assertEqual(len(users), 1)
+        user = next(iter(users.values()))
+        self.assertEqual(user["username"], "admin")
+        self.assertEqual(user["role"], "root")
+        self.assertTrue(app.verify_password("app-code", user["password_hash"]))
+        self.assertTrue(app.verify_password("automation-key", user["api_key_hash"]))
+
+    def test_startup_bootstraps_root_user_from_stored_settings_hashes(self) -> None:
+        app.set_app_secrets(access_code="stored-code", api_key="stored-api")
+        with state.state_lock:
+            state.shared_state["users"] = {}
+
+        app.load_persisted_workspaces()
+
+        users = storage.read_shelved_users()
+        self.assertEqual(len(users), 1)
+        user = next(iter(users.values()))
+        self.assertEqual(user["username"], "admin")
+        self.assertEqual(user["role"], "root")
+        self.assertTrue(app.verify_password("stored-code", user["password_hash"]))
+        self.assertTrue(app.verify_password("stored-api", user["api_key_hash"]))
+
+    def test_startup_does_not_bootstrap_when_root_user_exists(self) -> None:
+        config.ACCESS_CODE = "app-code"
+        existing = storage.set_user("Rooty", password="root-pass", api_key="root-api", role="root")
+
+        app.load_persisted_workspaces()
+
+        users = storage.read_shelved_users()
+        self.assertEqual(len(users), 1)
+        self.assertIn(existing["id"], users)
+        self.assertEqual(users[existing["id"]]["username"], "Rooty")
+
     def test_share_payload_includes_workspace_metadata(self) -> None:
         workspace = app.create_workspace("Ops Desk")
         app.add_text_entry("hello", workspace_id=workspace["id"])
