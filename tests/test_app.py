@@ -1172,6 +1172,55 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(redirected["status"], 303)
         self.assertEqual(redirected["headers"]["Location"], "/")
 
+    def test_password_workspace_owner_can_change_password_from_access_page(self) -> None:
+        self.start_server()
+        owner_cookie = self.user_cookie("owner", "owner-pass")
+        outsider_cookie = self.user_cookie("outsider", "outsider-pass")
+        owner = next(user for user in storage.list_users() if user["username"] == "owner")
+        workspace = app.create_workspace(
+            "Password Room",
+            password="old-vault",
+            owner_user_id=owner["id"],
+            access_mode="password",
+        )
+
+        self.assertEqual(self.select_workspace(owner_cookie, workspace["id"], password="old-vault")["status"], 200)
+        page = self.request("GET", "/", headers={"Cookie": owner_cookie})
+        self.assertEqual(page["status"], 200)
+        self.assertIn('href="/workspaces/access"', page["text"])
+
+        access_page = self.request("GET", "/workspaces/access", headers={"Cookie": owner_cookie})
+        self.assertEqual(access_page["status"], 200)
+        self.assertIn('id="workspacePasswordPanel"', access_page["text"])
+        token = access_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        access_payload_response = self.request(
+            "GET",
+            "/api/workspaces/access",
+            headers={"Cookie": owner_cookie},
+        )
+        self.assertEqual(access_payload_response["status"], 200)
+        access_payload = json.loads(access_payload_response["body"])
+        self.assertEqual(access_payload["workspace"]["access_mode"], "password")
+
+        update_response = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/password",
+            body=json.dumps({"password": "new-vault"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": owner_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(update_response["status"], 200)
+        updated = json.loads(update_response["body"])["workspace"]
+        self.assertTrue(updated["password_required"])
+        self.assertTrue(app.workspace_password_is_valid(app.get_workspace(workspace["id"]), "new-vault"))
+
+        self.assertEqual(self.select_workspace(outsider_cookie, workspace["id"], password="old-vault")["status"], 403)
+        self.assertEqual(self.select_workspace(outsider_cookie, workspace["id"], password="new-vault")["status"], 200)
+
     def test_workspace_creation_endpoint_accepts_custom_expiry(self) -> None:
         self.start_server()
 
@@ -3026,7 +3075,12 @@ class ScriptTests(unittest.TestCase):
         self.assertIn(".tabs-access-link {\n    display: none;", stylesheet)
         self.assertIn('id="hasAccessUsers"', access_template)
         self.assertIn('id="noAccessUsers"', access_template)
+        self.assertIn('id="workspacePasswordPanel"', access_template)
+        self.assertIn('id="workspaceAccessPassword"', access_template)
+        self.assertIn('/assets/password-toggle.js', access_template)
         self.assertIn('fetch("/api/workspaces/access")', access_script)
+        self.assertIn('/password`, {', access_script)
+        self.assertIn('workspace.access_mode === "password"', access_script)
         self.assertIn("moveSelected", access_script)
         self.assertIn("Save Access", access_template)
         self.assertIn('href="/workspaces"', index)

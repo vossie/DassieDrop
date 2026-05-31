@@ -41,6 +41,19 @@
         <h2>Workspace Access</h2>
         <div class="meta">__WORKSPACE_NAME__</div>
       </div>
+      <div id="workspacePasswordPanel" class="workspace-password-panel" hidden>
+        <h3>Workspace Password</h3>
+        <div class="meta">Change the password required to open this workspace.</div>
+        <div class="row settings-row">
+          <div class="password-field-wrap">
+            <input id="workspaceAccessPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New workspace password">
+            <button class="password-toggle-btn" type="button" data-password-toggle="workspaceAccessPassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+          <button id="saveWorkspacePasswordBtn" type="button">Save Password</button>
+        </div>
+      </div>
       <div class="access-manager">
         <section class="access-column" aria-labelledby="hasAccessTitle">
           <h3 id="hasAccessTitle">Has Access</h3>
@@ -88,5 +101,6 @@
   </footer>
 </main>
 <script src="/assets/workspace-access.js"></script>
+<script src="/assets/password-toggle.js"></script>
 </body>
 </html>

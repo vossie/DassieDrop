@@ -1315,6 +1315,21 @@ def set_workspace_explicit_users(workspace_id: str, user_ids: list[str]) -> dict
         return serialize_workspace_summary(workspace)
 
 
+def set_workspace_password(workspace_id: str, password: str) -> dict:
+    clean_workspace_id = str(workspace_id or "").strip()
+    clean_password = str(password or "").strip()
+    if not clean_password:
+        raise ValueError("Workspace password is required")
+    with state.state_lock:
+        workspace = get_workspace_locked(clean_workspace_id)
+        if workspace is None:
+            raise KeyError("Workspace not found")
+        workspace["password_hash"] = hash_password(clean_password)
+        workspace["access_mode"] = "password"
+        persist_workspaces_locked()
+        return serialize_workspace_summary(workspace)
+
+
 def list_workspaces() -> list[dict]:
     with state.state_lock:
         removed_workspaces = []

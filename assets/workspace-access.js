@@ -5,6 +5,9 @@ const noAccessUsers = document.getElementById("noAccessUsers");
 const removeAccessBtn = document.getElementById("removeAccessBtn");
 const addAccessBtn = document.getElementById("addAccessBtn");
 const saveAccessBtn = document.getElementById("saveAccessBtn");
+const workspacePasswordPanel = document.getElementById("workspacePasswordPanel");
+const workspaceAccessPassword = document.getElementById("workspaceAccessPassword");
+const saveWorkspacePasswordBtn = document.getElementById("saveWorkspacePasswordBtn");
 const accessStatus = document.getElementById("accessStatus");
 let workspace = null;
 let users = [];
@@ -36,6 +39,14 @@ function selectableUsers() {
 function renderAccessLists() {
   hasAccessUsers.innerHTML = "";
   noAccessUsers.innerHTML = "";
+
+  const explicitMode = workspace && workspace.access_mode === "explicit";
+  document.querySelector(".access-manager").hidden = !explicitMode;
+  saveAccessBtn.hidden = !explicitMode;
+  workspacePasswordPanel.hidden = !(workspace && workspace.access_mode === "password");
+  if (!explicitMode) {
+    return;
+  }
 
   for (const user of selectableUsers()) {
     const target = selectedUserIds.has(user.id) ? hasAccessUsers : noAccessUsers;
@@ -93,8 +104,37 @@ async function saveAccess() {
   }
 }
 
+async function saveWorkspacePassword() {
+  if (!workspace) {
+    return;
+  }
+  const password = workspaceAccessPassword.value.trim();
+  if (!password) {
+    setAccessStatus("Workspace password required.");
+    return;
+  }
+  try {
+    const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/password`, {
+      method: "POST",
+      headers: withCsrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ password })
+    });
+    if (!response.ok) {
+      throw new Error(`Workspace password save failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    workspace = payload.workspace;
+    workspaceAccessPassword.value = "";
+    renderAccessLists();
+    setAccessStatus("Workspace password saved.");
+  } catch (error) {
+    setAccessStatus("Could not save workspace password.");
+  }
+}
+
 removeAccessBtn.addEventListener("click", () => moveSelected(hasAccessUsers, false));
 addAccessBtn.addEventListener("click", () => moveSelected(noAccessUsers, true));
 saveAccessBtn.addEventListener("click", saveAccess);
+saveWorkspacePasswordBtn.addEventListener("click", saveWorkspacePassword);
 
 loadAccess();

@@ -344,6 +344,13 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_workspace_users_update(workspace_id)
             return
 
+        if parsed.path.startswith("/api/workspaces/") and parsed.path.endswith("/password"):
+            workspace_id = urllib.parse.unquote(
+                parsed.path.removeprefix("/api/workspaces/").removesuffix("/password")
+            )
+            self.handle_workspace_password_update(workspace_id)
+            return
+
         if parsed.path == "/api/settings":
             self.handle_settings_update()
             return
@@ -504,10 +511,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.redirect("/workspaces", cookie=cookie)
             return
 
-        can_manage_access = (
-            storage.workspace_access_mode(workspace) == "explicit"
-            and self.user_can_manage_workspace(workspace)
-        )
+        can_manage_access = storage.workspace_access_mode(workspace) in {
+            "explicit",
+            "password",
+        } and self.user_can_manage_workspace(workspace)
         self.send_html(
             render_template(
                 "index.html",
@@ -567,7 +574,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if workspace is None:
             self.redirect("/workspaces", cookie=cookie)
             return
-        if storage.workspace_access_mode(workspace) != "explicit":
+        if storage.workspace_access_mode(workspace) not in {"explicit", "password"}:
             self.redirect("/", cookie=cookie)
             return
         if not self.user_can_manage_workspace(workspace):
@@ -956,14 +963,42 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         self.send_json({"workspace": workspace, **self.workspace_list_payload()})
 
+    def handle_workspace_password_update(self, workspace_id: str) -> None:
+        payload = self.parse_json_body()
+        if payload is None:
+            return
+        workspace = storage.get_workspace(workspace_id)
+        if workspace is None:
+            self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+            return
+        if storage.workspace_access_mode(workspace) != "password":
+            self.send_error(HTTPStatus.BAD_REQUEST, "Workspace is not password protected")
+            return
+        if not self.user_can_manage_workspace(workspace):
+            self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
+            return
+        password = payload.get("password", "")
+        if not isinstance(password, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Password must be a string")
+            return
+        try:
+            workspace = storage.set_workspace_password(workspace_id, password)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        except KeyError:
+            self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
+            return
+        self.send_json({"workspace": workspace, **self.workspace_list_payload()})
+
     def handle_workspace_access_payload(self) -> None:
         workspace_id = self.current_session_workspace_id()
         workspace = storage.get_workspace(str(workspace_id or ""))
         if workspace is None:
             self.send_error(HTTPStatus.CONFLICT, "Workspace not selected")
             return
-        if storage.workspace_access_mode(workspace) != "explicit":
-            self.send_error(HTTPStatus.BAD_REQUEST, "Workspace is not explicit")
+        if storage.workspace_access_mode(workspace) not in {"explicit", "password"}:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Workspace access cannot be managed")
             return
         if not self.user_can_manage_workspace(workspace):
             self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")

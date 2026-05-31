@@ -1086,6 +1086,20 @@ input[type="file"] {
   gap: 16px;
   align-items: center;
 }
+.workspace-password-panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 22px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.workspace-password-panel[hidden] {
+  display: none;
+}
+.workspace-password-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
 .access-column {
   display: grid;
   gap: 8px;
