@@ -53,7 +53,7 @@ curl -sS \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: owner-user-api-key' \
   -X POST \
-  -d '{"name":"ops-private","access_mode":"explicit","explicit_user_ids":["user-id-1","user-id-2"]}' \
+  -d '{"name":"ops-private","access_mode":"explicit","explicit_usernames":["alice","bob"]}' \
   http://127.0.0.1:8000/api/workspaces
 ```
 
@@ -64,7 +64,7 @@ curl -sS \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: owner-user-api-key' \
   -X POST \
-  -d '{"user_ids":["user-id-2"]}' \
+  -d '{"usernames":["bob"]}' \
   http://127.0.0.1:8000/api/workspaces/WORKSPACE_ID/users
 ```
 

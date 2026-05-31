@@ -267,7 +267,7 @@ class AppStateTests(unittest.TestCase):
         )
 
         self.assertEqual(workspace["access_mode"], "explicit")
-        self.assertEqual(workspace["owner_user_id"], owner["id"])
+        self.assertEqual(workspace["owner_username"], "Owner")
         self.assertFalse(workspace["password_required"])
 
         owner_session = app.create_authorized_session()
@@ -1235,7 +1235,6 @@ class HttpServerTests(unittest.TestCase):
     def test_workspace_creation_endpoint_records_creator_and_explicit_users(self) -> None:
         self.start_server()
         creator_cookie = self.user_cookie("creator", "creator-pass")
-        creator_id = next(user["id"] for user in storage.list_users() if user["username"] == "creator")
         creator_token = self.csrf_token(creator_cookie)
 
         response = self.request(
@@ -1255,12 +1254,11 @@ class HttpServerTests(unittest.TestCase):
         payload = json.loads(response["body"])
         workspace = payload["workspace"]
         self.assertEqual(workspace["access_mode"], "explicit")
-        self.assertEqual(workspace["owner_user_id"], creator_id)
-        self.assertEqual(workspace["explicit_user_ids"], [creator_id])
+        self.assertEqual(workspace["owner_username"], "creator")
+        self.assertEqual(workspace["explicit_usernames"], ["creator"])
         self.assertNotIn("users", payload)
 
         blocked_cookie = self.user_cookie("blocked", "blocked-pass")
-        blocked_id = next(user["id"] for user in storage.list_users() if user["username"] == "blocked")
         blocked_token = self.csrf_token(blocked_cookie)
         blocked_enter = self.request(
             "POST",
@@ -1277,7 +1275,7 @@ class HttpServerTests(unittest.TestCase):
         update_response = self.request(
             "POST",
             f"/api/workspaces/{workspace['id']}/users",
-            body=json.dumps({"user_ids": [blocked_id]}).encode("utf-8"),
+            body=json.dumps({"usernames": ["blocked"]}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": creator_cookie,
@@ -1286,7 +1284,7 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(update_response["status"], 200)
         updated = json.loads(update_response["body"])["workspace"]
-        self.assertEqual(updated["explicit_user_ids"], [creator_id, blocked_id])
+        self.assertEqual(updated["explicit_usernames"], ["creator", "blocked"])
 
         allowed_enter = self.request(
             "POST",
@@ -1325,7 +1323,7 @@ class HttpServerTests(unittest.TestCase):
                 {
                     "name": "API Team",
                     "access_mode": "explicit",
-                    "explicit_user_ids": [allowed["id"]],
+                    "explicit_usernames": ["Allowed"],
                 }
             ).encode("utf-8"),
             headers={"Content-Type": "application/json", "X-API-Key": "owner-api"},
@@ -1333,8 +1331,8 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(create_response["status"], 200)
         workspace = json.loads(create_response["body"])["workspace"]
         self.assertEqual(workspace["access_mode"], "explicit")
-        self.assertEqual(workspace["owner_user_id"], owner["id"])
-        self.assertEqual(workspace["explicit_user_ids"], [owner["id"], allowed["id"]])
+        self.assertEqual(workspace["owner_username"], "Owner")
+        self.assertEqual(workspace["explicit_usernames"], ["Owner", "Allowed"])
 
         allowed_state = self.request(
             "GET",
@@ -1365,13 +1363,13 @@ class HttpServerTests(unittest.TestCase):
         update_response = self.request(
             "POST",
             f"/api/workspaces/{workspace['id']}/users",
-            body=json.dumps({"user_ids": [blocked["id"]]}).encode("utf-8"),
+            body=json.dumps({"usernames": ["Blocked"]}).encode("utf-8"),
             headers={"Content-Type": "application/json", "X-API-Key": "owner-api"},
         )
         self.assertEqual(update_response["status"], 200)
         self.assertEqual(
-            json.loads(update_response["body"])["workspace"]["explicit_user_ids"],
-            [owner["id"], blocked["id"]],
+            json.loads(update_response["body"])["workspace"]["explicit_usernames"],
+            ["Owner", "Blocked"],
         )
 
         blocked_state = self.request(
@@ -1404,6 +1402,7 @@ class HttpServerTests(unittest.TestCase):
         access_page = self.request("GET", "/workspaces/access", headers={"Cookie": creator_cookie})
         self.assertEqual(access_page["status"], 200)
         self.assertIn('id="hasAccessUsers"', access_page["text"])
+        self.assertIn('href="/"', access_page["text"])
         token = access_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
 
         access_payload_response = self.request(
@@ -1414,15 +1413,15 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(access_payload_response["status"], 200)
         access_payload = json.loads(access_payload_response["body"])
         self.assertEqual(access_payload["workspace"]["id"], workspace["id"])
-        self.assertIn(creator["id"], access_payload["workspace"]["explicit_user_ids"])
-        self.assertIn(allowed["id"], access_payload["workspace"]["explicit_user_ids"])
-        self.assertIn(blocked["id"], {user["id"] for user in access_payload["users"]})
-        self.assertIn(admin["id"], {user["id"] for user in access_payload["users"]})
+        self.assertIn("creator", access_payload["workspace"]["explicit_usernames"])
+        self.assertIn("Allowed", access_payload["workspace"]["explicit_usernames"])
+        self.assertIn("Blocked", {user["username"] for user in access_payload["users"]})
+        self.assertIn("Admin", {user["username"] for user in access_payload["users"]})
 
         update_response = self.request(
             "POST",
             f"/api/workspaces/{workspace['id']}/users",
-            body=json.dumps({"user_ids": [blocked["id"]]}).encode("utf-8"),
+            body=json.dumps({"usernames": ["Blocked"]}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": creator_cookie,
@@ -1431,7 +1430,7 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(update_response["status"], 200)
         updated = json.loads(update_response["body"])["workspace"]
-        self.assertEqual(updated["explicit_user_ids"], [creator["id"], blocked["id"]])
+        self.assertEqual(updated["explicit_usernames"], ["creator", "Blocked"])
 
     def test_workspace_access_page_requires_explicit_workspace_manager(self) -> None:
         self.start_server()
@@ -1612,11 +1611,12 @@ class HttpServerTests(unittest.TestCase):
             headers={"Cookie": admin_cookie},
         )
         self.assertEqual(access_page["status"], 200)
+        self.assertIn('href="/workspaces"', access_page["text"])
         token = access_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
         add_self = self.request(
             "POST",
             f"/api/workspaces/{workspace['id']}/users",
-            body=json.dumps({"user_ids": [admin["id"]]}).encode("utf-8"),
+            body=json.dumps({"usernames": ["Admin"]}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": admin_cookie,
@@ -1624,7 +1624,7 @@ class HttpServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(add_self["status"], 200)
-        self.assertIn(admin["id"], json.loads(add_self["body"])["workspace"]["explicit_user_ids"])
+        self.assertIn("Admin", json.loads(add_self["body"])["workspace"]["explicit_usernames"])
 
         allowed_enter = self.select_workspace(admin_cookie, workspace["id"])
         self.assertEqual(allowed_enter["status"], 200)
@@ -4077,6 +4077,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('id="workspaceMessageExpiry"', template)
         self.assertIn('value="explicit"', template)
         self.assertIn('fetch("/api/workspaces")', script)
+        self.assertIn("workspace.owner_username", script)
+        self.assertIn("Owner ${workspace.owner_username}", script)
         self.assertNotIn("saveExplicitWorkspaceUsers", script)
         self.assertNotIn("workspace-explicit-editor", script)
         self.assertIn("syncMessageExpiryOptions", script)
@@ -4092,6 +4094,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('id="hasAccessUsers"', access_template)
         self.assertIn('id="noAccessUsers"', access_template)
         self.assertIn('id="workspacePasswordPanel"', access_template)
+        self.assertIn('href="__BACK_URL__"', access_template)
         self.assertIn("__PASSWORD_PANEL_HIDDEN__", access_template)
         self.assertIn("__ACCESS_MANAGER_HIDDEN__", access_template)
         self.assertIn('id="workspaceAccessPassword"', access_template)
@@ -4100,8 +4103,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('/password`, {', access_script)
         self.assertIn('workspace.access_mode === "password"', access_script)
         self.assertIn('option.disabled = isOwner;', access_script)
-        self.assertIn('const isOwner = user.id === workspace.owner_user_id;', access_script)
-        self.assertIn('return users.filter((user) => user.id);', access_script)
+        self.assertIn('const isOwner = user.username === workspace.owner_username;', access_script)
+        self.assertIn('return users.filter((user) => user.username);', access_script)
+        self.assertIn('JSON.stringify({ usernames: Array.from(selectedUsernames) })', access_script)
+        self.assertNotIn("user_ids", access_script)
+        self.assertNotIn("explicit_user_ids", access_script)
         self.assertIn("moveSelected", access_script)
         self.assertIn("Save Access", access_template)
         self.assertIn('id="workspaceOpenPassword"', open_template)

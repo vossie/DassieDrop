@@ -376,6 +376,40 @@ def workspace_explicit_user_ids(workspace: dict) -> list[str]:
     return explicit_user_ids
 
 
+def username_for_user_id(user_id: str) -> str:
+    user = state.shared_state.get("users", {}).get(str(user_id or "").strip())
+    if not isinstance(user, dict):
+        return ""
+    return normalize_username(user.get("username"))
+
+
+def user_id_for_username_locked(username: str) -> str | None:
+    target = normalize_username(username).lower()
+    if not target:
+        return None
+    for user_id, user in get_users_locked().items():
+        if normalize_username(user.get("username")).lower() == target:
+            return user_id
+    return None
+
+
+def user_ids_for_usernames(usernames: list[str]) -> list[str]:
+    with state.state_lock:
+        return [
+            user_id
+            for username in normalize_workspace_user_ids(usernames)
+            if (user_id := user_id_for_username_locked(username)) is not None
+        ]
+
+
+def usernames_for_user_ids(user_ids: list[str]) -> list[str]:
+    return [
+        username
+        for user_id in normalize_workspace_user_ids(user_ids)
+        if (username := username_for_user_id(user_id))
+    ]
+
+
 def normalize_expiry_seconds(value: object) -> int:
     if value is None or value == "":
         return config.EXPIRY_SECONDS
@@ -605,8 +639,8 @@ def serialize_workspace_summary(workspace: dict) -> dict:
         "path": f"/w/{slug}",
         "password_required": bool(workspace.get("password_hash")),
         "access_mode": workspace_access_mode(workspace),
-        "owner_user_id": str(workspace.get("owner_user_id") or ""),
-        "explicit_user_ids": workspace_explicit_user_ids(workspace),
+        "owner_username": username_for_user_id(str(workspace.get("owner_user_id") or "")),
+        "explicit_usernames": usernames_for_user_ids(workspace_explicit_user_ids(workspace)),
         "expiry_seconds": workspace_expiry_seconds(workspace),
         "message_expiry_seconds": workspace_message_expiry_seconds(workspace),
         "created_at": workspace["created_at"],
@@ -1563,6 +1597,26 @@ def set_workspace_explicit_users(workspace_id: str, user_ids: list[str]) -> dict
         if workspace_access_mode(workspace) == "explicit" and owner_user_id and owner_user_id in users:
             clean_user_ids = [owner_user_id, *[user_id for user_id in clean_user_ids if user_id != owner_user_id]]
         workspace["explicit_user_ids"] = clean_user_ids
+        persist_workspaces_locked()
+        return serialize_workspace_summary(workspace)
+
+
+def set_workspace_explicit_usernames(workspace_id: str, usernames: list[str]) -> dict:
+    clean_workspace_id = str(workspace_id or "").strip()
+    with state.state_lock:
+        workspace = get_workspace_locked(clean_workspace_id)
+        if workspace is None:
+            raise KeyError("Workspace not found")
+        users = get_users_locked()
+        user_ids = [
+            user_id
+            for username in normalize_workspace_user_ids(usernames)
+            if (user_id := user_id_for_username_locked(username)) is not None
+        ]
+        owner_user_id = str(workspace.get("owner_user_id") or "").strip()
+        if workspace_access_mode(workspace) == "explicit" and owner_user_id and owner_user_id in users:
+            user_ids = [owner_user_id, *[user_id for user_id in user_ids if user_id != owner_user_id]]
+        workspace["explicit_user_ids"] = user_ids
         persist_workspaces_locked()
         return serialize_workspace_summary(workspace)
 

@@ -109,5 +109,5 @@ curl -X POST \
 - Use `X-Workspace` or `workspace` when targeting a non-default workspace.
 - Workspace names and usernames must be unique after normalisation.
 - Workspace access modes are `public`, `password`, and `explicit`.
-- For explicit-access workspaces, API clients can authenticate with a user's `X-API-Key`; the key's user must be the workspace owner, an admin/super-admin user, or included in the workspace `explicit_user_ids`.
+- For explicit-access workspaces, API clients can authenticate with a user's `X-API-Key`; the key's user must be the workspace owner or included in the workspace `explicit_usernames`.
 - If you expose DassieDrop externally, put it behind proper TLS and access controls.

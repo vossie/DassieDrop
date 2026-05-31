@@ -856,17 +856,17 @@ components:
           type: string
           enum: [public, password, explicit]
           default: public
-        explicit_user_ids:
+        explicit_usernames:
           type: array
-          description: Initial user ids granted access when `access_mode` is `explicit`.
+          description: Initial usernames granted access when `access_mode` is `explicit`.
           items:
             type: string
       additionalProperties: false
     WorkspaceUsersRequest:
       type: object
-      required: [user_ids]
+      required: [usernames]
       properties:
-        user_ids:
+        usernames:
           type: array
           items:
             type: string
@@ -880,8 +880,8 @@ components:
         - path
         - password_required
         - access_mode
-        - owner_user_id
-        - explicit_user_ids
+        - owner_username
+        - explicit_usernames
         - expiry_seconds
         - message_expiry_seconds
         - created_at
@@ -902,9 +902,9 @@ components:
         access_mode:
           type: string
           enum: [public, password, explicit]
-        owner_user_id:
+        owner_username:
           type: string
-        explicit_user_ids:
+        explicit_usernames:
           type: array
           items:
             type: string

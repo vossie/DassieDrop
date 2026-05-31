@@ -48,10 +48,16 @@ class ManagementRoutesMixin:
         return str((current_user or {}).get("id") or "")
 
     def user_can_manage_workspace(self, workspace: dict) -> bool:
-        current_user_id = self.current_user_id()
+        current_user = auth.current_user(self) or {}
+        current_user_id = str(current_user.get("id") or "")
+        current_username = str(current_user.get("username") or "")
         if auth.user_has_role(self, {"super-admin", "admin"}):
             return True
-        return bool(current_user_id) and str(workspace.get("owner_user_id") or "") == current_user_id
+        owner_user_id = str(workspace.get("owner_user_id") or "")
+        owner_username = str(workspace.get("owner_username") or "")
+        return (bool(current_user_id) and owner_user_id == current_user_id) or (
+            bool(current_username) and owner_username == current_username
+        )
 
     def user_can_delete_workspace(self, workspace: dict) -> bool:
         if workspace.get("id") == config.DEFAULT_WORKSPACE_ID:
@@ -170,12 +176,13 @@ class ManagementRoutesMixin:
         if not isinstance(access_mode, str) or access_mode not in {"public", "password", "explicit"}:
             self.send_error(HTTPStatus.BAD_REQUEST, "Access mode must be public, password, or explicit")
             return
-        explicit_user_ids = payload.get("explicit_user_ids", [])
-        if not isinstance(explicit_user_ids, list) or not all(
-            isinstance(user_id, str) for user_id in explicit_user_ids
+        explicit_usernames = payload.get("explicit_usernames", [])
+        if not isinstance(explicit_usernames, list) or not all(
+            isinstance(username, str) for username in explicit_usernames
         ):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Explicit user IDs must be a list of strings")
+            self.send_error(HTTPStatus.BAD_REQUEST, "Explicit usernames must be a list of strings")
             return
+        explicit_user_ids = storage.user_ids_for_usernames(explicit_usernames)
 
         allowed, retry_after = auth.consume_rate_limit_token(
             self,
@@ -411,12 +418,12 @@ class ManagementRoutesMixin:
         if not self.user_can_manage_workspace(workspace):
             self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
             return
-        user_ids = payload.get("user_ids", [])
-        if not isinstance(user_ids, list):
-            self.send_error(HTTPStatus.BAD_REQUEST, "User IDs must be a list")
+        usernames = payload.get("usernames", [])
+        if not isinstance(usernames, list) or not all(isinstance(username, str) for username in usernames):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Usernames must be a list")
             return
         try:
-            workspace = storage.set_workspace_explicit_users(workspace_id, user_ids)
+            workspace = storage.set_workspace_explicit_usernames(workspace_id, usernames)
         except KeyError:
             self.send_error(HTTPStatus.NOT_FOUND, "Workspace not found")
             return
@@ -467,7 +474,6 @@ class ManagementRoutesMixin:
             return
         users = [
             {
-                "id": str(user.get("id") or ""),
                 "username": str(user.get("username") or ""),
                 "role": str(user.get("role") or ""),
             }
@@ -477,7 +483,7 @@ class ManagementRoutesMixin:
             {
                 "workspace": storage.serialize_workspace_summary(workspace),
                 "users": users,
-                "current_user_id": self.current_user_id(),
+                "current_username": str((auth.current_user(self) or {}).get("username") or ""),
             }
         )
 

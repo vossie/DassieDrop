@@ -11,7 +11,7 @@ const saveWorkspacePasswordBtn = document.getElementById("saveWorkspacePasswordB
 const accessStatus = document.getElementById("accessStatus");
 let workspace = null;
 let users = [];
-let selectedUserIds = new Set();
+let selectedUsernames = new Set();
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -26,14 +26,14 @@ function setAccessStatus(message) {
 
 function optionForUser(user, isOwner = false) {
   const option = document.createElement("option");
-  option.value = user.id;
+  option.value = user.username;
   option.textContent = `${user.username} (${user.role})${isOwner ? " - owner" : ""}`;
   option.disabled = isOwner;
   return option;
 }
 
 function selectableUsers() {
-  return users.filter((user) => user.id);
+  return users.filter((user) => user.username);
 }
 
 function renderAccessLists() {
@@ -49,8 +49,8 @@ function renderAccessLists() {
   }
 
   for (const user of selectableUsers()) {
-    const isOwner = user.id === workspace.owner_user_id;
-    const target = selectedUserIds.has(user.id) ? hasAccessUsers : noAccessUsers;
+    const isOwner = user.username === workspace.owner_username;
+    const target = selectedUsernames.has(user.username) ? hasAccessUsers : noAccessUsers;
     target.appendChild(optionForUser(user, isOwner));
   }
 }
@@ -58,9 +58,9 @@ function renderAccessLists() {
 function moveSelected(fromSelect, hasAccess) {
   for (const option of Array.from(fromSelect.selectedOptions)) {
     if (hasAccess) {
-      selectedUserIds.add(option.value);
+      selectedUsernames.add(option.value);
     } else {
-      selectedUserIds.delete(option.value);
+      selectedUsernames.delete(option.value);
     }
   }
   renderAccessLists();
@@ -75,7 +75,7 @@ async function loadAccess() {
     const payload = await response.json();
     workspace = payload.workspace;
     users = payload.users || [];
-    selectedUserIds = new Set(workspace.explicit_user_ids || []);
+    selectedUsernames = new Set(workspace.explicit_usernames || []);
     renderAccessLists();
   } catch (error) {
     setAccessStatus("Could not load workspace access.");
@@ -90,14 +90,14 @@ async function saveAccess() {
     const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/users`, {
       method: "POST",
       headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ user_ids: Array.from(selectedUserIds) })
+      body: JSON.stringify({ usernames: Array.from(selectedUsernames) })
     });
     if (!response.ok) {
       throw new Error(`Workspace access save failed: ${response.status}`);
     }
     const payload = await response.json();
     workspace = payload.workspace;
-    selectedUserIds = new Set(workspace.explicit_user_ids || []);
+    selectedUsernames = new Set(workspace.explicit_usernames || []);
     renderAccessLists();
     setAccessStatus("Workspace access saved.");
   } catch (error) {

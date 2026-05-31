@@ -169,8 +169,9 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     const meta = document.createElement("div");
     meta.className = "meta workspace-meta";
     const scope = workspaceScopeLabel(workspace);
+    const owner = workspace.owner_username ? ` - Owner ${workspace.owner_username}` : "";
     const current = workspace.id === currentWorkspaceId ? " • Current selection" : "";
-    meta.textContent = `${scope} - Workspace ${formatWorkspaceExpiry(workspace.expiry_seconds).toLowerCase()} - Messages ${formatWorkspaceExpiry(workspace.message_expiry_seconds).toLowerCase()} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
+    meta.textContent = `${scope}${owner} - Workspace ${formatWorkspaceExpiry(workspace.expiry_seconds).toLowerCase()} - Messages ${formatWorkspaceExpiry(workspace.message_expiry_seconds).toLowerCase()} - Created ${formatWorkspaceDate(workspace.created_at)}${current}`;
 
     details.appendChild(name);
     details.appendChild(meta);

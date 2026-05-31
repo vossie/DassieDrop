@@ -106,6 +106,7 @@ class PageRoutesMixin:
                 active_session["access_workspace_id"] = workspace["id"]
 
         access_mode = storage.workspace_access_mode(workspace)
+        back_url = "/workspaces" if requested_workspace else "/"
         self.send_html(
             render_template(
                 "workspace_access.html",
@@ -114,6 +115,7 @@ class PageRoutesMixin:
                     "__UPDATE_NOTICE__": update_notice_html(),
                     "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
                     "__WORKSPACE_NAME__": html.escape(storage.compact_workspace_name(workspace["name"])),
+                    "__BACK_URL__": html.escape(back_url),
                     "__PASSWORD_PANEL_HIDDEN__": "" if access_mode == "password" else "hidden",
                     "__ACCESS_MANAGER_HIDDEN__": "" if access_mode == "explicit" else "hidden",
                 },
