@@ -1,12 +1,5 @@
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
 const csrfToken = (csrfMeta && csrfMeta.content) || "";
-const editUserPanel = document.getElementById("editUserPanel");
-const editUserName = document.getElementById("editUserName");
-const editUserPassword = document.getElementById("editUserPassword");
-const editUserApiKey = document.getElementById("editUserApiKey");
-const editUserRole = document.getElementById("editUserRole");
-const saveEditUserBtn = document.getElementById("saveEditUserBtn");
-const cancelEditUserBtn = document.getElementById("cancelEditUserBtn");
 const usersStatus = document.getElementById("usersStatus");
 const usersList = document.getElementById("usersList");
 
@@ -22,26 +15,6 @@ function formatUserDate(ts) {
     return "Just now";
   }
   return new Date(ts * 1000).toLocaleString();
-}
-
-function clearEditUser() {
-  editUserName.value = "";
-  editUserPassword.value = "";
-  editUserApiKey.value = "";
-  editUserRole.value = "user";
-  editUserPanel.classList.add("hidden");
-  editUserPanel.setAttribute("aria-hidden", "true");
-}
-
-function beginEditUser(user) {
-  editUserName.value = user.username;
-  editUserPassword.value = "";
-  editUserApiKey.value = "";
-  editUserRole.value = user.role;
-  editUserPanel.classList.remove("hidden");
-  editUserPanel.setAttribute("aria-hidden", "false");
-  editUserName.focus();
-  usersStatus.textContent = "Editing user. Leave password or API key blank to keep the stored value.";
 }
 
 function renderUsers(users) {
@@ -77,10 +50,10 @@ function renderUsers(users) {
     const actions = document.createElement("div");
     actions.className = "file-card-actions";
 
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.textContent = "Edit";
-    editBtn.addEventListener("click", () => beginEditUser(user));
+    const editLink = document.createElement("a");
+    editLink.className = "workspace-cancel-btn button-link";
+    editLink.href = `/users/edit?id=${encodeURIComponent(user.id)}`;
+    editLink.textContent = "Edit";
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -97,14 +70,13 @@ function renderUsers(users) {
         }
         const payload = await response.json();
         renderUsers(payload.users || []);
-        clearEditUser();
         usersStatus.textContent = "User deleted.";
       } catch (error) {
         usersStatus.textContent = "Could not delete user.";
       }
     });
 
-    actions.appendChild(editBtn);
+    actions.appendChild(editLink);
     actions.appendChild(deleteBtn);
     li.appendChild(details);
     li.appendChild(actions);
@@ -125,64 +97,4 @@ async function loadUsers() {
   }
 }
 
-async function saveEditUser() {
-  const username = editUserName.value.trim();
-  if (!username) {
-    usersStatus.textContent = "Username required.";
-    editUserName.focus();
-    return;
-  }
-
-  const payload = {
-    username,
-    role: editUserRole.value
-  };
-  if (editUserPassword.value) {
-    payload.password = editUserPassword.value;
-  }
-  if (editUserApiKey.value) {
-    payload.api_key = editUserApiKey.value;
-  }
-
-  usersStatus.textContent = "Saving...";
-  try {
-    const response = await fetch("/api/users", {
-      method: "POST",
-      headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      throw new Error(`User save failed: ${response.status}`);
-    }
-    const result = await response.json();
-    renderUsers(result.users || []);
-    clearEditUser();
-    usersStatus.textContent = "User saved.";
-  } catch (error) {
-    usersStatus.textContent = "Could not save user.";
-  }
-}
-
-saveEditUserBtn.addEventListener("click", saveEditUser);
-cancelEditUserBtn.addEventListener("click", () => {
-  clearEditUser();
-  usersStatus.textContent = "Edit cancelled.";
-});
-editUserName.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    saveEditUser();
-  }
-});
-editUserPassword.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    saveEditUser();
-  }
-});
-editUserApiKey.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    saveEditUser();
-  }
-});
-
-clearEditUser();
 loadUsers();

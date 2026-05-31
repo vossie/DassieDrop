@@ -209,6 +209,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_new_user_page()
             return
 
+        if parsed.path == "/users/edit":
+            self.handle_edit_user_page()
+            return
+
         if parsed.path == "/help":
             self.handle_help_page()
             return
@@ -320,6 +324,11 @@ class AppHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/users":
             self.handle_user_save()
+            return
+
+        if parsed.path.startswith("/api/users/"):
+            user_id = urllib.parse.unquote(parsed.path.removeprefix("/api/users/"))
+            self.handle_user_update(user_id)
             return
 
         if parsed.path.startswith("/api/workspaces/") and parsed.path.endswith("/enter"):
@@ -524,6 +533,24 @@ class AppHandler(BaseHTTPRequestHandler):
             cookie=cookie,
         )
 
+    def handle_edit_user_page(self) -> None:
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
+            self.send_html(render_template("login.html"))
+            return
+
+        _, session, cookie = auth.ensure_browser_session(self)
+        self.send_html(
+            render_template(
+                "user_edit.html",
+                {
+                    "__APP_VERSION__": html.escape(get_app_version()),
+                    "__UPDATE_NOTICE__": update_notice_html(),
+                    "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                },
+            ),
+            cookie=cookie,
+        )
+
     def handle_workspace_shortcut(self, workspace_slug_value: str) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
@@ -680,6 +707,36 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         try:
             user = storage.set_user(username, password=password, api_key=api_key, role=role)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        self.send_json({"user": user, "users": storage.list_users(), "roles": list(storage.USER_ROLES)})
+
+    def handle_user_update(self, user_id: str) -> None:
+        payload = self.parse_json_body()
+        if payload is None:
+            return
+        username = payload.get("username", "")
+        password = payload.get("password", None)
+        api_key = payload.get("api_key", None)
+        role = payload.get("role", "user")
+        if not isinstance(username, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Username must be a string")
+            return
+        if password is not None and not isinstance(password, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Password must be a string")
+            return
+        if api_key is not None and not isinstance(api_key, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "API key must be a string")
+            return
+        if not isinstance(role, str):
+            self.send_error(HTTPStatus.BAD_REQUEST, "Role must be a string")
+            return
+        try:
+            user = storage.update_user(user_id, username, password=password, api_key=api_key, role=role)
+        except KeyError:
+            self.send_error(HTTPStatus.NOT_FOUND, "User not found")
+            return
         except ValueError as exc:
             self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return

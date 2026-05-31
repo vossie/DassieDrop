@@ -47,37 +47,6 @@
           <span class="workspace-pill-label">Add User</span>
         </a>
       </div>
-
-      <div id="editUserPanel" class="settings-form users-form hidden" aria-hidden="true">
-        <div class="panel-title users-edit-title">
-          <h3>Edit User</h3>
-          <div class="meta">Leave password or API key blank to keep the stored value.</div>
-        </div>
-        <label class="settings-field" for="editUserName">
-          <span>Username</span>
-          <input id="editUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
-        </label>
-        <label class="settings-field" for="editUserPassword">
-          <span>Password</span>
-          <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
-        </label>
-        <label class="settings-field" for="editUserApiKey">
-          <span>API key</span>
-          <input id="editUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
-        </label>
-        <label class="settings-field" for="editUserRole">
-          <span>Role</span>
-          <select id="editUserRole" class="inline-input settings-input">
-            <option value="user">user - password-protected workspace access</option>
-            <option value="admin">admin - any workspace access</option>
-            <option value="root">root - settings and user management</option>
-          </select>
-        </label>
-        <div class="users-edit-actions">
-          <button id="saveEditUserBtn" type="button">Save User</button>
-          <button id="cancelEditUserBtn" class="workspace-cancel-btn" type="button">Cancel</button>
-        </div>
-      </div>
       <div class="status" id="usersStatus"></div>
       <ul class="history-list users-list" id="usersList"></ul>
     </article>

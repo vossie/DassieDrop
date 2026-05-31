@@ -625,6 +625,15 @@ def find_user_by_username_locked(username: str) -> dict | None:
     return None
 
 
+def get_user(user_id: str) -> dict | None:
+    clean_user_id = str(user_id or "").strip()
+    if not clean_user_id:
+        return None
+    with state.state_lock:
+        user = get_users_locked().get(clean_user_id)
+        return serialize_user(user) if user is not None else None
+
+
 def set_user(
     username: str,
     password: str | None = None,
@@ -658,6 +667,39 @@ def set_user(
         if api_key is not None:
             user["api_key_hash"] = hash_password(api_key.strip()) if api_key.strip() else None
         user["updated_at"] = now
+        persist_state_locked()
+        return serialize_user(user)
+
+
+def update_user(
+    user_id: str,
+    username: str,
+    password: str | None = None,
+    api_key: str | None = None,
+    role: str = "user",
+) -> dict:
+    clean_user_id = str(user_id or "").strip()
+    clean_username = normalize_username(username)
+    if not clean_user_id:
+        raise ValueError("User ID required")
+    if not clean_username:
+        raise ValueError("Username required")
+    clean_role = normalize_user_role(role)
+    with state.state_lock:
+        users = get_users_locked()
+        user = users.get(clean_user_id)
+        if user is None:
+            raise KeyError("User not found")
+        duplicate = find_user_by_username_locked(clean_username)
+        if duplicate is not None and duplicate.get("id") != clean_user_id:
+            raise ValueError("Username already exists")
+        user["username"] = clean_username
+        user["role"] = clean_role
+        if password is not None:
+            user["password_hash"] = hash_password(password.strip()) if password.strip() else None
+        if api_key is not None:
+            user["api_key_hash"] = hash_password(api_key.strip()) if api_key.strip() else None
+        user["updated_at"] = config.now_ts()
         persist_state_locked()
         return serialize_user(user)
 

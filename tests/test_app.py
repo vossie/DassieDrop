@@ -967,7 +967,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(users_page["status"], 200)
         self.assertIn("DassieDrop Users", users_page["text"])
         self.assertIn('href="/users/new"', users_page["text"])
-        self.assertIn("cancelEditUserBtn", users_page["text"])
+        self.assertNotIn("cancelEditUserBtn", users_page["text"])
         cookie = users_page["headers"]["Set-Cookie"].split(";", 1)[0]
 
         new_user_page = self.request("GET", "/users/new", headers={"Cookie": cookie})
@@ -1005,6 +1005,37 @@ class HttpServerTests(unittest.TestCase):
         stored = users[payload["user"]["id"]]
         self.assertTrue(app.verify_password("secret-pass", stored["password_hash"]))
         self.assertTrue(app.verify_password("secret-api", stored["api_key_hash"]))
+
+        updated = self.request(
+            "POST",
+            f"/api/users/{payload['user']['id']}",
+            body=json.dumps({"username": "alice2", "role": "admin"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(updated["status"], 200)
+        updated_payload = json.loads(updated["body"])
+        self.assertEqual(updated_payload["user"]["username"], "alice2")
+        self.assertEqual(updated_payload["user"]["role"], "admin")
+        updated_users = storage.read_shelved_users()
+        updated_stored = updated_users[payload["user"]["id"]]
+        self.assertTrue(app.verify_password("secret-pass", updated_stored["password_hash"]))
+        self.assertTrue(app.verify_password("secret-api", updated_stored["api_key_hash"]))
+
+        users_script = self.request("GET", "/assets/users.js", headers={"Cookie": cookie})
+        self.assertEqual(users_script["status"], 200)
+        self.assertIn("/users/edit?id=", users_script["text"])
+        edit_page = self.request(
+            "GET",
+            f"/users/edit?id={payload['user']['id']}",
+            headers={"Cookie": cookie},
+        )
+        self.assertEqual(edit_page["status"], 200)
+        self.assertIn("DassieDrop Edit User", edit_page["text"])
+        self.assertIn('href="/users">Cancel</a>', edit_page["text"])
 
         delete_response = self.request(
             "DELETE",

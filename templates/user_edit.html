@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DassieDrop Edit User</title>
+  <meta name="dassiedrop-csrf-token" content="__CSRF_TOKEN__">
+  <link rel="icon" type="image/png" href="/assets/DassieDrop-dassie-icon.png">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="header-bar">
+  <main class="shell shell-header">
+    <section class="hero">
+      <div class="hero-top">
+        <div class="hero-copy">
+          <div class="hero-title-row hero-title-row-workspace">
+            <div class="hero-brand-row">
+              <a class="hero-brand-link" href="https://github.com/vossie/DassieDrop" target="_blank" rel="noreferrer">
+                <img class="hero-mark" src="/assets/DassieDrop-dassie-icon.png" alt="">
+                <span class="hero-title-text">DassieDrop</span>
+              </a>
+            </div>
+            <div class="workspace-selector-wrap">
+              <a class="workspace-pill" href="/users" aria-label="Back to users" title="Back to users">
+                <span class="workspace-pill-label">Back to Users</span>
+              </a>
+            </div>
+          </div>
+          <h1 class="sr-only">DassieDrop Edit User</h1>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<main class="shell">
+  <section class="grid">
+    <article class="panel tab-panel workspace-panel">
+      <div class="panel-title">
+        <h2>Edit User</h2>
+        <div class="meta">Leave password or API key blank to keep the stored value.</div>
+      </div>
+
+      <div class="settings-form users-form">
+        <label class="settings-field" for="editUserName">
+          <span>Username</span>
+          <input id="editUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
+        </label>
+        <label class="settings-field" for="editUserPassword">
+          <span>Password</span>
+          <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+        </label>
+        <label class="settings-field" for="editUserApiKey">
+          <span>API key</span>
+          <input id="editUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+        </label>
+        <label class="settings-field" for="editUserRole">
+          <span>Role</span>
+          <select id="editUserRole" class="inline-input settings-input">
+            <option value="user">user - password-protected workspace access</option>
+            <option value="admin">admin - any workspace access</option>
+            <option value="root">root - settings and user management</option>
+          </select>
+        </label>
+        <div class="users-edit-actions">
+          <button id="saveEditUserBtn" type="button">Save User</button>
+          <a class="workspace-cancel-btn button-link" href="/users">Cancel</a>
+        </div>
+      </div>
+
+      <div class="status" id="editUserStatus"></div>
+    </article>
+  </section>
+
+  <footer class="app-footer" aria-label="Licensing and privacy notice">
+    <p class="footer-line">
+      <a class="footer-link" href="/users">Users</a>
+      ·
+      <a class="footer-link" href="/settings">Settings</a>
+      ·
+      <a class="footer-link" href="/help">Help</a>
+    </p>
+    <p class="footer-line">
+      DassieDrop v__APP_VERSION__
+    </p>
+    <p class="footer-line">
+      Copyright © 2026 DassieDrop contributors. Released under the ISC License.
+    </p>
+    <p class="footer-line">
+      ISC licensed. DassieDrop is intended only for devices and people you trust on your own network.
+    </p>
+    __UPDATE_NOTICE__
+  </footer>
+</main>
+<script src="/assets/user-edit.js"></script>
+</body>
+</html>
