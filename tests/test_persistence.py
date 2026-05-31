@@ -108,7 +108,7 @@ class PersistenceTests(CoreStateTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -150,7 +150,7 @@ class PersistenceTests(CoreStateTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -199,7 +199,7 @@ class PersistenceTests(CoreStateTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -248,7 +248,7 @@ class PersistenceTests(CoreStateTestCase):
                 },
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(broken_payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(broken_payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -259,7 +259,7 @@ class PersistenceTests(CoreStateTestCase):
 
         snapshot = app.get_snapshot("ops123")
         self.assertEqual(snapshot["files"][0]["name"], "kept.txt")
-        repaired = json.loads(app.uploads_index_path().read_text(encoding="utf-8"))
+        repaired = app.read_shelved_payload()
         self.assertEqual(len(repaired["workspaces"]), 2)
 
     def test_workspace_deletion_removes_persisted_file_artifacts(self) -> None:
@@ -278,7 +278,7 @@ class PersistenceTests(CoreStateTestCase):
         self.assertTrue(deleted)
         self.assertEqual(message, "")
         self.assertFalse(target.exists())
-        persisted = json.loads(app.uploads_index_path().read_text(encoding="utf-8"))
+        persisted = app.read_shelved_payload()
         self.assertNotIn(workspace["id"], {item["id"] for item in persisted["workspaces"]})
 
     def test_duplicate_workspace_names_get_unique_stable_slugs_after_reload(self) -> None:
@@ -360,7 +360,7 @@ class PersistenceTests(CoreStateTestCase):
                 },
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}

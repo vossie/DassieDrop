@@ -324,7 +324,7 @@ class SecurityHttpTests(CoreHttpTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}

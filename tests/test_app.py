@@ -364,7 +364,7 @@ class AppStateTests(unittest.TestCase):
         app.load_persisted_files()
 
         self.assertEqual(app.get_snapshot()["files"], [])
-        index_payload = json.loads(app.uploads_index_path().read_text(encoding="utf-8"))
+        index_payload = app.read_shelved_payload()
         self.assertEqual(index_payload["workspaces"][0]["files"], [])
 
     def test_can_create_enter_and_delete_workspace_with_super_password(self) -> None:

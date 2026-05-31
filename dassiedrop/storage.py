@@ -5,6 +5,7 @@ import math
 import mimetypes
 import re
 import secrets
+import shelve
 import tempfile
 from pathlib import Path
 
@@ -16,6 +17,10 @@ def ensure_upload_dir() -> None:
 
 
 def uploads_index_path() -> Path:
+    return config.UPLOAD_DIR / ".dassiedrop-workspaces"
+
+
+def legacy_uploads_index_path() -> Path:
     return config.UPLOAD_DIR / ".dassiedrop-workspaces.json"
 
 
@@ -395,24 +400,62 @@ def serialize_persisted_workspace(workspace: dict) -> dict:
     }
 
 
-def persist_workspaces_locked() -> None:
-    ensure_upload_dir()
-    ensure_default_workspace_locked()
-    payload = {
+PERSISTED_PAYLOAD_KEY = "payload"
+
+
+def persisted_payload() -> dict:
+    return {
         "workspaces": [
             serialize_persisted_workspace(workspace)
             for workspace in list_workspace_objects_locked()
         ]
     }
+
+
+def shelve_index_exists() -> bool:
     index_path = uploads_index_path()
-    temp_path = index_path.with_suffix(index_path.suffix + ".tmp")
-    temp_path.write_text(json.dumps(payload), encoding="utf-8")
-    temp_path.replace(index_path)
+    candidates = [
+        index_path,
+        index_path.with_suffix(index_path.suffix + ".db"),
+        index_path.with_suffix(index_path.suffix + ".dat"),
+        index_path.with_suffix(index_path.suffix + ".dir"),
+        index_path.with_suffix(index_path.suffix + ".bak"),
+    ]
+    return any(path.exists() for path in candidates)
+
+
+def read_shelved_payload() -> dict:
+    if not shelve_index_exists():
+        return {}
+    try:
+        with shelve.open(str(uploads_index_path()), flag="r") as index:
+            payload = index.get(PERSISTED_PAYLOAD_KEY, {})
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def read_legacy_json_payload() -> dict:
+    index_path = legacy_uploads_index_path()
+    if not index_path.exists():
+        return {}
+    try:
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def persist_workspaces_locked() -> None:
+    ensure_upload_dir()
+    ensure_default_workspace_locked()
+    with shelve.open(str(uploads_index_path()), flag="n") as index:
+        index[PERSISTED_PAYLOAD_KEY] = persisted_payload()
+        index.sync()
 
 
 def load_persisted_workspaces() -> None:
     ensure_upload_dir()
-    index_path = uploads_index_path()
     loaded_workspaces = {}
     restored_short_codes = set()
 
@@ -495,12 +538,8 @@ def load_persisted_workspaces() -> None:
             ),
         }
 
-    if index_path.exists():
-        try:
-            payload = json.loads(index_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            payload = {}
-
+    payload = read_shelved_payload() or read_legacy_json_payload()
+    if payload:
         raw_workspaces = payload.get("workspaces")
         if isinstance(raw_workspaces, list):
             for item in raw_workspaces:

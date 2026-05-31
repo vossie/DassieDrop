@@ -3,6 +3,7 @@ import hashlib
 import http.client
 import json
 import os
+import shelve
 import socket
 import subprocess
 import sys
@@ -358,10 +359,17 @@ class BinaryRestartTests(unittest.TestCase):
         )
         time.sleep(0.2)
 
-        index_file = self._upload_dir / ".dassiedrop-workspaces.json"
+        index_file = self._upload_dir / ".dassiedrop-workspaces"
+        index_candidates = [
+            index_file,
+            index_file.with_suffix(index_file.suffix + ".db"),
+            index_file.with_suffix(index_file.suffix + ".dat"),
+            index_file.with_suffix(index_file.suffix + ".dir"),
+            index_file.with_suffix(index_file.suffix + ".bak"),
+        ]
         self.assertTrue(
-            index_file.exists(),
-            "Workspace index (.dassiedrop-workspaces.json) not written to UPLOAD_DIR — "
+            any(path.exists() for path in index_candidates),
+            "Workspace shelve index (.dassiedrop-workspaces) not written to UPLOAD_DIR — "
             "it may have been written to the ephemeral _MEIPASS temp dir",
         )
         self.assertNotIn(
@@ -369,7 +377,8 @@ class BinaryRestartTests(unittest.TestCase):
             str(index_file.resolve()),
             "Workspace index path contains _MEI (PyInstaller temp dir)",
         )
-        payload = json.loads(index_file.read_text(encoding="utf-8"))
+        with shelve.open(str(index_file), flag="r") as index:
+            payload = index["payload"]
         self.assertIn("workspaces", payload)
 
     def test_env_file_is_loaded(self) -> None:
