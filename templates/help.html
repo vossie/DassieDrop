@@ -181,7 +181,8 @@ bash script.sh</code></pre>
         <pre class="help-code"><code>curl -sS -O "$API_HOST/openapi.yaml"</code></pre>
 
         <p>If the app is protected, send your automation secret as:</p>
-        <pre class="help-code"><code>-H 'X-API-Key: your-api-key-or-access-code'</code></pre>
+        <pre class="help-code"><code>-H 'X-API-Key: your-user-api-key'</code></pre>
+        <p>User passwords are only for browser login. They are not API keys and they do not unlock workspace passwords.</p>
 
         <h3>Share text</h3>
         <p>Share a text snippet:</p>
@@ -220,7 +221,7 @@ bash script.sh</code></pre>
         <p>Share text into a protected workspace:</p>
         <pre class="help-code"><code>curl -sS \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -H 'X-Workspace: ops-desk' \
   -H 'X-Workspace-Password: workspace-secret' \
   -X POST \
@@ -257,7 +258,7 @@ bash script.sh</code></pre>
 
         <p>Share a file into a protected workspace:</p>
         <pre class="help-code"><code>curl -sS \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -H 'X-Workspace: ops-desk' \
   -H 'X-Workspace-Password: workspace-secret' \
   -X POST \
@@ -271,14 +272,14 @@ bash script.sh</code></pre>
         <p><strong>Text example with API auth</strong></p>
         <pre class="help-code"><code>curl -sS \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -X POST \
   -d '{"text":"hello again"}' \
   "$API_HOST/api/share-text"</code></pre>
 
         <p><strong>File example with API auth</strong></p>
         <pre class="help-code"><code>curl -sS \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -X POST \
   -F 'file=@./example.txt' \
   "$API_HOST/api/share-file"</code></pre>
@@ -350,9 +351,9 @@ bash script.sh</code></pre>
         <ul>
           <li>Open the workspace picker and find the workspace you want to remove.</li>
           <li>Click <strong>Delete</strong>.</li>
-          <li>If the workspace is protected, enter the workspace password to confirm deletion.</li>
+          <li>Confirm the prompt. Workspace owners, admins, and super-admin users can delete restricted workspaces without entering the workspace password.</li>
         </ul>
-        <p>The default workspace cannot be deleted.</p>
+        <p>The default workspace can only be deleted by a super-admin user.</p>
 
         <h3 id="sharing-text">Sharing text</h3>
         <ol>

@@ -77,6 +77,9 @@ No pairing. No cloud dependency.
 - **User-managed access**
   Built-in local users with super-admin, admin, and user roles plus per-user API keys.
 
+- **Workspace access controls**
+  Public, password-protected, and explicit-user workspaces. Admins and super-admins can manage restricted workspaces, but user passwords never override workspace passwords.
+
 ---
 
 ## How it compares

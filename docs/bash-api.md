@@ -28,6 +28,8 @@ Protected workspaces can also use:
 
 - `X-Workspace-Password: <workspace-password>`
 
+User login passwords do not work as workspace passwords. Admin and super-admin users can manage restricted workspaces, but entering a password-protected workspace still requires the workspace password. For explicit-access workspaces, admins and super-admins can add themselves through access management before entering.
+
 List workspaces:
 
 ```bash
@@ -233,7 +235,7 @@ curl -sS \
   http://127.0.0.1:8000/api/share-text
 ```
 
-If you still want browser-style session auth from bash, you can log in first and reuse the session cookie:
+If you still want browser-style session auth from bash, you can log in first, fetch a page to read the CSRF token, and reuse both the session cookie and `X-CSRF-Token`:
 
 ```bash
 curl -sS -c cookies.txt \
@@ -241,16 +243,22 @@ curl -sS -c cookies.txt \
   -X POST \
   -d '{"username":"admin","password":"password"}' \
   http://127.0.0.1:8000/login
+
+CSRF_TOKEN="$(
+  curl -sS -b cookies.txt http://127.0.0.1:8000/ \
+    | sed -n 's/.*name="dassiedrop-csrf-token" content="\([^"]*\)".*/\1/p'
+)"
 ```
 
-Then pass `-b cookies.txt` on later requests:
+Then pass both values on later cookie-authenticated mutation requests:
 
 ```bash
 curl -sS -b cookies.txt \
   -H 'Content-Type: application/json' \
+  -H "X-CSRF-Token: $CSRF_TOKEN" \
   -X POST \
   -d '{"text":"hello again"}' \
   http://127.0.0.1:8000/api/share-text
 ```
 
-`X-API-Key` is for authenticated API routes. LAN links under `/s/{SHORT-CODE}` do not use `X-API-Key`; use `X-Access-Password` there only when a password is required.
+For automation, prefer `X-API-Key`; it does not need CSRF. User passwords are only for browser login, not API authentication. LAN links under `/s/{SHORT-CODE}` do not use `X-API-Key`; use `X-Access-Password` there only when a password is required.

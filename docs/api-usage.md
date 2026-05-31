@@ -106,8 +106,11 @@ curl -X POST \
 ## Notes
 
 - The API is intended for local-network use.
+- `X-API-Key` must be a user's configured API key. A browser login password is not an API key.
+- Browser session cookies can also authenticate API requests, but cookie-backed `POST` and `DELETE` requests must include the page's `X-CSRF-Token`; `X-API-Key` requests do not need CSRF.
 - Use `X-Workspace` or `workspace` when targeting a non-default workspace.
+- Password-protected workspaces require `X-Workspace-Password` when selected by API header or query parameter. Admin and super-admin user passwords do not override workspace passwords.
 - Workspace names and usernames must be unique after normalisation.
 - Workspace access modes are `public`, `password`, and `explicit`.
-- For explicit-access workspaces, API clients can authenticate with a user's `X-API-Key`; the key's user must be the workspace owner or included in the workspace `explicit_usernames`.
+- For explicit-access workspaces, API clients can authenticate with a user's `X-API-Key`; the key's user must be the workspace owner or included in the workspace `explicit_usernames`. Admins and super-admins can manage access, but they must add themselves before entering an explicit workspace.
 - If you expose DassieDrop externally, put it behind proper TLS and access controls.

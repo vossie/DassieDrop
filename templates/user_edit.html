@@ -53,7 +53,7 @@
         <label class="settings-field" for="editUserPassword">
           <span class="settings-label-row">
             <span>Password</span>
-            <span class="settings-help" tabindex="0" data-tooltip="Leave blank to keep the current password. Root and admin passwords can unlock protected workspaces.">?</span>
+            <span class="settings-help" tabindex="0" data-tooltip="Leave blank to keep the current password. User passwords do not unlock workspace passwords.">?</span>
           </span>
           <div class="password-field-wrap">
             <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
@@ -77,7 +77,7 @@
         <label class="settings-field" id="editUserRoleField" for="editUserRole">
           <span class="settings-label-row">
             <span>Role</span>
-            <span class="settings-help" tabindex="0" data-tooltip="User can access unprotected or password-known workspaces. Admin can access any workspace. Super-admin can also manage all users.">?</span>
+            <span class="settings-help" tabindex="0" data-tooltip="User can access public, password-known, and granted explicit workspaces. Admin can manage workspace access. Super-admin can also manage users.">?</span>
           </span>
           <select id="editUserRole" class="inline-input settings-input">
             <option value="user">user - password-protected workspace access</option>

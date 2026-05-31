@@ -36,7 +36,8 @@ Rules:
 
 - Update `VERSION` when preparing a user-visible release change.
 - The UI header reads from `VERSION` unless `APP_VERSION` is provided in the environment.
-- The Ubuntu install script deploys the `VERSION` file and also supports `APP_VERSION` override in the service environment.
+- Static asset URLs use the app version plus an asset-content hash, so browsers pick up changed JavaScript and CSS without requiring a display-version bump for every internal fix.
+- The Ubuntu and CentOS Stream install scripts deploy the `VERSION` file and also support `APP_VERSION` override in the service environment.
 
 ## Main Branch Release Rule
 

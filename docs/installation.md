@@ -92,7 +92,7 @@ HTTPS_SELF_SIGNED_HOST=192.168.1.24
 On a new installation DassieDrop creates a super-admin user named `admin` with password `password`.
 Change that password from the Users page after first login.
 
-Super-admin users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
+Super-admin users can manage all local user accounts. Admin and super-admin users can manage restricted workspace access and passwords, but they still need the workspace password to enter a password-protected workspace and must grant themselves access before entering an explicit-access workspace. Regular users can access public workspaces, password-protected workspaces with the workspace password, and explicit-access workspaces they have been granted.
 
 Users can enable an optional authenticator app from their own edit-user page. DassieDrop uses standard TOTP codes, so apps such as Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden, and Aegis can scan the displayed QR code or add the displayed secret manually. Super-admin users can disable authenticator protection for any user if someone loses access to their authenticator device.
 
@@ -374,6 +374,24 @@ curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/gi
 
 In `--silent` mode, the installer keeps optional prompts disabled and uses default values.
 
+Uninstall the Ubuntu service from a checked-out repo:
+
+```bash
+sudo bash ./scripts/uninstall-ubuntu-service.sh
+```
+
+Or uninstall directly from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/uninstall-ubuntu-service.sh | sudo bash
+```
+
+Remove the uploaded data and service user too:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/uninstall-ubuntu-service.sh | sudo REMOVE_DATA=1 REMOVE_USER=1 bash
+```
+
 Use the Ubuntu service install for a native `systemd` deployment. Use Docker for a portable container runtime.
 
 ## Install On CentOS Stream From GitHub
@@ -423,8 +441,20 @@ Uninstall the CentOS Stream service:
 sudo bash ./scripts/uninstall-centos-stream-service.sh
 ```
 
+Or uninstall directly from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/uninstall-centos-stream-service.sh | sudo bash
+```
+
 Remove the uploaded data and service user too:
 
 ```bash
 sudo REMOVE_DATA=1 REMOVE_USER=1 bash ./scripts/uninstall-centos-stream-service.sh
+```
+
+Directly from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/uninstall-centos-stream-service.sh | sudo REMOVE_DATA=1 REMOVE_USER=1 bash
 ```

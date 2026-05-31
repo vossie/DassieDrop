@@ -3664,6 +3664,9 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("/api/share-file", doc)
         self.assertIn("openapi.yaml", doc)
         self.assertIn("curl", doc)
+        self.assertIn("X-CSRF-Token", doc)
+        self.assertIn("User passwords are only for browser login, not API authentication.", doc)
+        self.assertNotIn("your-api-key-or-access-code", doc)
 
     def test_openapi_schema_documents_core_http_api(self) -> None:
         doc = (REPO_ROOT / "docs" / "openapi.yaml").read_text(encoding="utf-8")
@@ -3675,11 +3678,13 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("/api/workspaces:", doc)
         self.assertIn("X-Workspace", doc)
         self.assertIn("X-API-Key", doc)
+        self.assertIn("Authorized workspace managers do not need this.", doc)
 
     def test_developer_guide_mentions_versioning_and_main_rule(self) -> None:
         doc = (REPO_ROOT / "docs" / "developer-guide.md").read_text(encoding="utf-8")
         self.assertIn("VERSION", doc)
         self.assertIn("Versions roll up when committing to `main`.", doc)
+        self.assertIn("asset-content hash", doc)
 
     def test_readme_and_license_cover_local_control_and_isc_license(self) -> None:
         root = REPO_ROOT
@@ -3697,6 +3702,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("ISC licensed.", index_template)
         self.assertIn("If you are not an intended recipient or authorized user", index_template)
         self.assertIn("docs/installation.md", readme)
+        self.assertIn("user passwords never override workspace passwords", readme)
 
     def test_security_doc_covers_lan_only_deployment(self) -> None:
         security = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
@@ -3705,6 +3711,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("reverse proxy", security)
         self.assertIn("TLS", security)
         self.assertIn("24 hours", security)
+        self.assertIn("Browser login passwords are not API keys.", security)
+        self.assertIn("Admin and super-admin passwords do not unlock password-protected workspaces.", security)
 
     def test_github_ubuntu_install_upgrade_script_uses_github_archive_and_env_file(self) -> None:
         script = (REPO_ROOT / "scripts" / "github-ubuntu-install-upgrade.sh").read_text(encoding="utf-8")
@@ -3908,6 +3916,10 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("http://localhost:8000", install_doc)
         self.assertIn("https://localhost:8443", install_doc)
         self.assertIn("## Use Your Own SSL Certificate", install_doc)
+        self.assertIn("uninstall-ubuntu-service.sh | sudo bash", install_doc)
+        self.assertIn("uninstall-centos-stream-service.sh | sudo bash", install_doc)
+        self.assertIn("must grant themselves access before entering an explicit-access workspace", install_doc)
+        self.assertNotIn("Admin users can access any workspace", install_doc)
         self.assertIn("HTTPS_CERT_FILE=/etc/ssl/certs/dassiedrop.crt", install_doc)
         self.assertIn("HTTPS_KEY_FILE=/etc/ssl/private/dassiedrop.key", install_doc)
         self.assertIn("### Reset The Installed Admin Password", install_doc)

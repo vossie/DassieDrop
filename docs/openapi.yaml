@@ -126,7 +126,11 @@ paths:
     delete:
       tags: [Workspaces]
       summary: Delete a workspace
-      description: Only workspace managers can delete workspaces. The default workspace can only be deleted by a super-admin user.
+      description: |
+        Only workspace managers can delete restricted workspaces. Workspace owners,
+        admins, and super-admin users do not need to provide the workspace password
+        when deleting a password-protected or explicit-access workspace. The default
+        workspace can only be deleted by a super-admin user.
       security:
         - sessionCookie: []
         - apiKeyAuth: []
@@ -134,6 +138,7 @@ paths:
         - $ref: '#/components/parameters/WorkspaceIdPath'
       requestBody:
         required: false
+        description: Optional legacy password payload. Authorized workspace managers do not need this.
         content:
           application/json:
             schema:
