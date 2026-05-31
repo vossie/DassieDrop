@@ -80,7 +80,11 @@ function syncMessageExpiryOptions() {
   }
 }
 
-async function openWorkspace(workspace) {
+async function openWorkspace(workspace, currentWorkspaceId = null) {
+  if (workspace.id === currentWorkspaceId) {
+    window.location.href = "/";
+    return;
+  }
   if (workspace.password_required) {
     window.location.href = `/workspaces/open?workspace=${encodeURIComponent(workspace.slug || workspace.id)}`;
     return;
@@ -153,7 +157,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
       if (event.target.closest("button, input, label, select, a")) {
         return;
       }
-      openWorkspace(workspace);
+      openWorkspace(workspace, currentWorkspaceId);
     });
 
     const row = document.createElement("div");
@@ -187,7 +191,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
         : "Open";
     enterBtn.addEventListener("click", async (event) => {
       event.stopPropagation();
-      openWorkspace(workspace);
+      openWorkspace(workspace, currentWorkspaceId);
     });
 
     const deleteBtn = document.createElement("button");
