@@ -11,6 +11,7 @@ const disableTotpBtn = document.getElementById("disableTotpBtn");
 const totpSetupPanel = document.getElementById("totpSetupPanel");
 const totpQrCode = document.getElementById("totpQrCode");
 const totpServerTime = document.getElementById("totpServerTime");
+const totpServerCode = document.getElementById("totpServerCode");
 const totpSecret = document.getElementById("totpSecret");
 const totpUri = document.getElementById("totpUri");
 const totpCode = document.getElementById("totpCode");
@@ -87,6 +88,7 @@ async function setupTotp() {
     } else {
       totpServerTime.textContent = "";
     }
+    totpServerCode.textContent = payload.server_code ? `Server check code: ${payload.server_code}` : "";
     totpCode.value = "";
     totpSetupPanel.hidden = false;
     editUserStatus.textContent = "Add the secret to your authenticator app.";
@@ -97,6 +99,9 @@ async function setupTotp() {
 }
 
 async function confirmTotp() {
+  if (confirmTotpBtn.disabled) {
+    return;
+  }
   const code = totpCode.value.trim();
   if (!/^\d{6}$/.test(code)) {
     editUserStatus.textContent = "Enter the 6-digit authenticator code.";
@@ -104,6 +109,7 @@ async function confirmTotp() {
     return;
   }
   editUserStatus.textContent = "Checking authenticator code...";
+  confirmTotpBtn.disabled = true;
   try {
     const response = await fetch(`/api/users/${encodeURIComponent(userId)}/totp/confirm`, {
       method: "POST",
@@ -121,7 +127,10 @@ async function confirmTotp() {
     setupTotpBtn.textContent = "Reset Authenticator";
     editUserStatus.textContent = "Authenticator enabled.";
   } catch (error) {
-    editUserStatus.textContent = "Wrong authenticator code. Check that your phone time matches the server time shown above.";
+    confirmTotpBtn.disabled = false;
+    editUserStatus.textContent = error.message.includes("Authenticator setup has not been started")
+      ? "Authenticator setup expired. Click Set Up and scan the current QR again."
+      : "Wrong authenticator code. Check that it matches the current server check code shown above.";
   }
 }
 

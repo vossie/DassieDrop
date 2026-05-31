@@ -604,6 +604,7 @@ class AppStateTests(unittest.TestCase):
         self.assertIn("otpauth://totp/DassieDrop%3AAlice", setup["otpauth_uri"])
         self.assertIn("<svg", setup["qr_svg"])
         self.assertIn("server_time", setup)
+        self.assertEqual(setup["server_code"], storage.totp_code(setup["secret"], setup["server_time"]))
         self.assertIn('fill="#000"', setup["qr_svg"])
         self.assertIn('aria-label="Authenticator QR code"', setup["qr_svg"])
         repeated_setup = storage.begin_user_totp_setup(user["id"])
@@ -617,10 +618,21 @@ class AppStateTests(unittest.TestCase):
         stored = users[user["id"]]
         self.assertEqual(stored["totp_secret"], setup["secret"])
         self.assertNotIn("totp_secret", confirmed)
+        repeated_confirmed = storage.confirm_user_totp_setup(user["id"], code)
+        self.assertTrue(repeated_confirmed["totp_enabled"])
 
         disabled = storage.disable_user_totp(user["id"])
         self.assertFalse(disabled["totp_enabled"])
         self.assertFalse(storage.user_totp_code_is_valid(user["id"], code))
+
+    def test_user_totp_setup_accepts_displayed_server_check_code(self) -> None:
+        user = storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
+        setup = storage.begin_user_totp_setup(user["id"])
+
+        config.now_ts = lambda: self.fake_now() + 300
+        confirmed = storage.confirm_user_totp_setup(user["id"], setup["server_code"])
+
+        self.assertTrue(confirmed["totp_enabled"])
 
     def test_user_creation_rejects_duplicate_usernames(self) -> None:
         storage.set_user("Alice", password="secret-pass", api_key="secret-api", role="admin")
@@ -1609,6 +1621,7 @@ class HttpServerTests(unittest.TestCase):
         setup_payload = json.loads(setup_response["body"])
         self.assertIn("otpauth_uri", setup_payload)
         self.assertIn("server_time", setup_payload)
+        self.assertIn("server_code", setup_payload)
         self.assertIn("<svg", setup_payload["qr_svg"])
 
         confirm_response = self.request(
@@ -3698,9 +3711,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('id="setupTotpBtn"', template)
         self.assertIn('id="totpQrCode"', template)
         self.assertIn('id="totpServerTime"', template)
+        self.assertIn('id="totpServerCode"', template)
         self.assertIn('id="totpSecret"', template)
         self.assertIn("totpQrCode.innerHTML", script)
         self.assertIn("totpServerTime.textContent", script)
+        self.assertIn("totpServerCode.textContent", script)
         self.assertIn("/totp/setup", script)
         self.assertIn("/totp/confirm", script)
         self.assertIn(".totp-qr-code", stylesheet)

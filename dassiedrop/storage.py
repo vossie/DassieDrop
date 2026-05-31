@@ -723,6 +723,9 @@ def normalize_users(users: object) -> dict:
             else None,
             "totp_secret": normalize_totp_secret(user.get("totp_secret")),
             "totp_pending_secret": normalize_totp_secret(user.get("totp_pending_secret")),
+            "totp_pending_at": restore_ts(user.get("totp_pending_at"))
+            if user.get("totp_pending_secret")
+            else None,
             "created_at": restore_ts(user.get("created_at")),
             "updated_at": restore_ts(user.get("updated_at") or user.get("created_at")),
         }
@@ -790,6 +793,7 @@ def ensure_bootstrap_root_user_locked() -> bool:
         "api_key_hash": api_key_hash,
         "totp_secret": None,
         "totp_pending_secret": None,
+        "totp_pending_at": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -872,12 +876,13 @@ def begin_user_totp_setup(user_id: str) -> dict:
         if user is None:
             raise KeyError("User not found")
         secret = normalize_totp_secret(user.get("totp_pending_secret"))
+        server_time = config.now_ts()
         if not secret:
             secret = generate_totp_secret()
             user["totp_pending_secret"] = secret
-            user["updated_at"] = config.now_ts()
-            persist_state_locked()
-        server_time = config.now_ts()
+        user["totp_pending_at"] = server_time
+        user["updated_at"] = server_time
+        persist_state_locked()
         return {
             "secret": secret,
             "otpauth_uri": totp_uri(user["username"], secret),
@@ -885,6 +890,7 @@ def begin_user_totp_setup(user_id: str) -> dict:
             "period": TOTP_PERIOD_SECONDS,
             "digits": TOTP_DIGITS,
             "server_time": server_time,
+            "server_code": totp_code(secret, server_time),
         }
 
 
@@ -899,11 +905,21 @@ def confirm_user_totp_setup(user_id: str, code: str) -> dict:
             raise KeyError("User not found")
         secret = normalize_totp_secret(user.get("totp_pending_secret"))
         if not secret:
+            enabled_secret = normalize_totp_secret(user.get("totp_secret"))
+            if enabled_secret and totp_code_is_valid(enabled_secret, code):
+                return serialize_user(user)
             raise ValueError("Authenticator setup has not been started")
-        if not totp_code_is_valid(secret, code):
+        pending_at = user.get("totp_pending_at")
+        pending_at_valid = isinstance(pending_at, (int, float)) and totp_code_is_valid(
+            secret,
+            code,
+            timestamp=float(pending_at),
+        )
+        if not pending_at_valid and not totp_code_is_valid(secret, code):
             raise ValueError("Wrong authenticator code")
         user["totp_secret"] = secret
         user["totp_pending_secret"] = None
+        user["totp_pending_at"] = None
         user["updated_at"] = config.now_ts()
         persist_state_locked()
         return serialize_user(user)
@@ -920,6 +936,7 @@ def disable_user_totp(user_id: str) -> dict:
             raise KeyError("User not found")
         user["totp_secret"] = None
         user["totp_pending_secret"] = None
+        user["totp_pending_at"] = None
         user["updated_at"] = config.now_ts()
         persist_state_locked()
         return serialize_user(user)
@@ -961,6 +978,7 @@ def set_user(
             "api_key_hash": None,
             "totp_secret": None,
             "totp_pending_secret": None,
+            "totp_pending_at": None,
             "created_at": now,
             "updated_at": now,
         }
