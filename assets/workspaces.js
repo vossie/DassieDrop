@@ -196,10 +196,6 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     deleteBtn.textContent = "Delete";
     deleteBtn.addEventListener("click", async (event) => {
       event.stopPropagation();
-      if (workspace.password_required) {
-        setWorkspaceStatus("Open the password-protected workspace before deleting it.");
-        return;
-      }
       if (!confirmWorkspaceDelete(workspace)) {
         return;
       }

@@ -1686,11 +1686,12 @@ def delete_workspace(
     workspace_id: str,
     password: str = "",
     user_id: str | None = None,
+    require_password: bool = True,
 ) -> tuple[bool, str]:
     workspace = get_workspace(workspace_id)
     if workspace is None:
         return (False, "Workspace not found")
-    if not workspace_delete_password_is_valid(workspace, password, user_id=user_id):
+    if require_password and not workspace_delete_password_is_valid(workspace, password, user_id=user_id):
         return (False, "Wrong workspace password")
 
     removed_workspace = None

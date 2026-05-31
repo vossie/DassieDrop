@@ -2379,7 +2379,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(third["status"], 429)
         self.assertEqual(third["headers"]["Retry-After"], "60")
 
-    def test_workspace_delete_rejects_privileged_user_password(self) -> None:
+    def test_workspace_delete_allows_manager_without_workspace_password(self) -> None:
         self.start_server()
         cookie = self.root_cookie(password="override")
         workspace = app.create_workspace("Secure", password="vault")
@@ -2391,7 +2391,7 @@ class HttpServerTests(unittest.TestCase):
         response = self.request(
             "DELETE",
             f"/api/workspaces/{workspace['id']}",
-            body=json.dumps({"password": "override"}).encode("utf-8"),
+            body=json.dumps({"password": ""}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": cookie,
@@ -2399,20 +2399,57 @@ class HttpServerTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response["status"], 403)
-        self.assertIn("Wrong workspace password", response["text"])
+        self.assertEqual(response["status"], 200)
+        self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+    def test_workspace_delete_allows_owner_and_admin_for_restricted_workspaces(self) -> None:
+        self.start_server()
+        owner_cookie = self.user_cookie("owner", "owner-pass")
+        owner = next(user for user in storage.list_users() if user["username"] == "owner")
+        password_workspace = app.create_workspace("Owner Secure", password="vault", owner_user_id=owner["id"])
+        explicit_workspace = app.create_workspace(
+            "Owner Explicit",
+            owner_user_id=owner["id"],
+            access_mode="explicit",
+        )
+        owner_token = self.csrf_token(owner_cookie)
 
         response = self.request(
             "DELETE",
-            f"/api/workspaces/{workspace['id']}",
-            body=json.dumps({"password": "vault"}).encode("utf-8"),
+            f"/api/workspaces/{password_workspace['id']}",
+            body=json.dumps({"password": ""}).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
-                "Cookie": cookie,
-                "X-CSRF-Token": token,
+                "Cookie": owner_cookie,
+                "X-CSRF-Token": owner_token,
             },
         )
         self.assertEqual(response["status"], 200)
+        self.assertNotIn(password_workspace["id"], {item["id"] for item in app.list_workspaces()})
+
+        storage.set_user("admin-user", password="admin-pass", api_key="admin-api", role="admin")
+        admin_login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin-user", "password": "admin-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(admin_login["status"], 200)
+        admin_cookie = admin_login["headers"]["Set-Cookie"].split(";", 1)[0]
+        admin_token = self.csrf_token(admin_cookie)
+
+        response = self.request(
+            "DELETE",
+            f"/api/workspaces/{explicit_workspace['id']}",
+            body=json.dumps({"password": ""}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": admin_cookie,
+                "X-CSRF-Token": admin_token,
+            },
+        )
+        self.assertEqual(response["status"], 200)
+        self.assertNotIn(explicit_workspace["id"], {item["id"] for item in app.list_workspaces()})
 
     def test_delete_flow_removes_entry_from_follow_up_requests(self) -> None:
         self.start_server()
@@ -4143,6 +4180,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("!workspace.can_access", script)
         self.assertNotIn("Enter the workspace password to open this workspace.", script)
         self.assertNotIn("super-admin/admin user password", script)
+        self.assertNotIn("Open the password-protected workspace before deleting it.", script)
         self.assertIn("if (workspace.can_delete) {", script)
         self.assertIn('li.addEventListener("click"', script)
         self.assertIn('if (event.target.closest("button, input, label, select, a")) {', script)

@@ -663,35 +663,18 @@ class SecurityHttpTests(CoreHttpTestCase):
         )
         self.assertEqual(recovered["status"], 200)
 
-    def test_workspace_delete_is_rate_limited_after_repeated_wrong_passwords(self) -> None:
+    def test_workspace_delete_does_not_use_workspace_password_for_authorized_manager(self) -> None:
         self.start_server()
         workspace = app.create_workspace("Delete Vault", password="vault")
 
-        for _ in range(config.AUTH_MAX_FAILURES):
-            response = self.request(
-                "DELETE",
-                f"/api/workspaces/{workspace['id']}",
-                body=json.dumps({"password": "wrong"}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-            )
-            self.assertEqual(response["status"], 403)
-
-        throttled = self.request(
+        response = self.request(
             "DELETE",
             f"/api/workspaces/{workspace['id']}",
             body=json.dumps({"password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        self.assertEqual(throttled["status"], 429)
-
-        self.current_time += config.AUTH_LOCKOUT_SECONDS + 1
-        deleted = self.request(
-            "DELETE",
-            f"/api/workspaces/{workspace['id']}",
-            body=json.dumps({"password": "vault"}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        self.assertEqual(deleted["status"], 200)
+        self.assertEqual(response["status"], 200)
+        self.assertNotIn(workspace["id"], {item["id"] for item in app.list_workspaces()})
 
     def test_malformed_password_headers_fail_cleanly(self) -> None:
         self.start_server()

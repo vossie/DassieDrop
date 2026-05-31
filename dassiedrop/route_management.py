@@ -511,7 +511,12 @@ class ManagementRoutesMixin:
             self.send_error(HTTPStatus.FORBIDDEN, "Workspace admin required")
             return
         current_user_id = self.current_user_id()
-        ok, message = storage.delete_workspace(workspace_id, password=password, user_id=current_user_id)
+        ok, message = storage.delete_workspace(
+            workspace_id,
+            password=password,
+            user_id=current_user_id,
+            require_password=not (workspace is not None and self.user_can_delete_workspace(workspace)),
+        )
         if not ok:
             status = HTTPStatus.NOT_FOUND if message == "Workspace not found" else HTTPStatus.FORBIDDEN
             if status == HTTPStatus.FORBIDDEN:
