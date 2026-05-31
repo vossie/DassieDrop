@@ -25,6 +25,11 @@ def session_cookie(session_id: str, secure: bool = False) -> str:
     return f"session={session_id}; Path=/; HttpOnly; SameSite=Lax{secure_suffix}"
 
 
+def expired_session_cookie(secure: bool = False) -> str:
+    secure_suffix = "; Secure" if secure else ""
+    return f"session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure_suffix}"
+
+
 def get_session_by_id(session_id: str, touch: bool = False) -> dict | None:
     if not session_id:
         return None
@@ -51,6 +56,14 @@ def get_session(handler: BaseHTTPRequestHandler) -> tuple[str | None, dict | Non
     if session is None:
         return (None, None)
     return (session_id, session)
+
+
+def logout(handler: BaseHTTPRequestHandler) -> str:
+    session_id, _ = get_session(handler)
+    if session_id:
+        with state.session_lock:
+            state.authorized_sessions.pop(session_id, None)
+    return expired_session_cookie(secure=bool(getattr(handler.server, "is_https", False)))
 
 
 def is_authorized(handler: BaseHTTPRequestHandler) -> bool:

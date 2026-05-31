@@ -193,6 +193,17 @@ class AppHandler(BaseHTTPRequestHandler):
             self.handle_root()
             return
 
+        if parsed.path == "/login":
+            if auth.access_code_is_configured() and auth.is_authorized(self):
+                self.redirect("/")
+                return
+            self.send_html(render_template("login.html"))
+            return
+
+        if parsed.path == "/logout":
+            self.redirect("/login", cookie=auth.logout(self))
+            return
+
         if parsed.path == "/workspaces":
             self.handle_workspaces_page()
             return

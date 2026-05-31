@@ -1370,6 +1370,23 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(users[root["id"]]["username"], "renamed-root")
         self.assertEqual(users[root["id"]]["role"], "admin")
 
+    def test_logout_clears_browser_session_and_login_page_is_direct(self) -> None:
+        self.start_server()
+        cookie = self.root_cookie()
+        session_id = cookie.split("=", 1)[1]
+        self.assertIn(session_id, state.authorized_sessions)
+
+        login_page = self.request("GET", "/login")
+        self.assertEqual(login_page["status"], 200)
+        self.assertIn("Sign In", login_page["text"])
+
+        logout = self.request("GET", "/logout", headers={"Cookie": cookie})
+
+        self.assertEqual(logout["status"], 303)
+        self.assertEqual(logout["headers"]["Location"], "/login")
+        self.assertIn("Max-Age=0", logout["headers"]["Set-Cookie"])
+        self.assertNotIn(session_id, state.authorized_sessions)
+
     def test_workspace_creation_is_rate_limited(self) -> None:
         self.start_server()
         config.WORKSPACE_CREATE_RATE_LIMIT_MAX_REQUESTS = 2
@@ -2823,6 +2840,12 @@ class ScriptTests(unittest.TestCase):
         index = (REPO_ROOT / "templates" / "index.html").read_text(
             encoding="utf-8"
         )
+        help_template = (REPO_ROOT / "templates" / "help.html").read_text(
+            encoding="utf-8"
+        )
+        users_template = (REPO_ROOT / "templates" / "users.html").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("Create Workspace", template)
         self.assertIn('id="workspaceAccessMode"', template)
         self.assertIn('value="explicit"', template)
@@ -2842,6 +2865,10 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("DassieDrop v__APP_VERSION__", index)
         self.assertIn('class="hero-title-row hero-title-row-workspace"', template)
         self.assertIn('class="hero-brand-link"', template)
+        for page in (index, template, help_template, users_template):
+            self.assertIn('<a class="hero-brand-link" href="/workspaces">', page)
+            self.assertIn('href="https://github.com/vossie/DassieDrop"', page)
+            self.assertIn('href="/logout"', page)
         self.assertNotIn("Choose a workspace or create a new one", template)
         self.assertNotIn("window.prompt", script)
         self.assertIn('className = "workspace-auth-row"', script)
