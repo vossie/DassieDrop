@@ -20,6 +20,8 @@ from dassiedrop.auth import (
 )
 from dassiedrop.routes import (
     AppHandler,
+)
+from dassiedrop.http_support import (
     base_url_from_request,
     build_server,
     get_app_version,
@@ -42,14 +44,15 @@ from dassiedrop.storage import (
     find_entry_by_short_code,
     find_file_entry,
     find_text_entry,
+    get_snapshot,
     get_latest_file_entry,
     get_latest_text_entry,
-    get_snapshot,
     get_workspace,
     get_workspace_by_slug_locked,
     get_workspace_locked,
     guess_content_type,
     json_bytes,
+    legacy_uploads_index_path,
     list_workspace_objects_locked,
     list_workspaces,
     load_persisted_files,
@@ -58,6 +61,7 @@ from dassiedrop.storage import (
     persist_workspaces_locked,
     prune_expired_entries,
     prune_workspace_locked,
+    read_shelved_payload,
     resolve_workspace_selector_locked,
     sanitize_filename,
     sanitize_workspace_name,

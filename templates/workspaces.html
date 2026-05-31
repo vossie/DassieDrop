@@ -16,7 +16,7 @@
         <div class="hero-copy">
           <div class="hero-title-row hero-title-row-workspace">
             <div class="hero-brand-row">
-              <a class="hero-brand-link" href="https://github.com/vossie/DassieDrop" target="_blank" rel="noreferrer">
+              <a class="hero-brand-link" href="/workspaces">
                 <img class="hero-mark" src="/assets/DassieDrop-dassie-icon.png" alt="">
                 <span class="hero-title-text">DassieDrop</span>
               </a>
@@ -40,19 +40,51 @@
     <article class="panel tab-panel workspace-panel">
       <div class="panel-title">
         <h2>Create Workspace</h2>
-        <div class="meta">Public workspaces open directly. Protected workspaces ask for a password.</div>
+        <div class="meta">Public workspaces open directly. Password-protected workspaces ask for a password. Explicit workspaces only open for selected users.</div>
       </div>
       <div class="row stack">
         <input id="workspaceName" class="inline-input workspace-input" type="text" maxlength="80" placeholder="Workspace name">
         <div class="row text-controls-row workspace-create-row">
-          <button id="createWorkspaceBtn" type="button">Create Workspace</button>
-        <label class="checkbox-row" for="workspaceProtected">
-          <input id="workspaceProtected" type="checkbox">
-          <span>Password protected</span>
-        </label>
-        <div class="hidden-options" id="workspacePasswordWrap">
-          <input id="workspacePassword" class="inline-input workspace-input" type="password" placeholder="Workspace password">
-        </div>
+          <label class="workspace-expiry-label" for="workspaceExpiry">
+            <span>Workspace expires</span>
+            <select id="workspaceExpiry" class="inline-input workspace-expiry-select">
+              <option value="3600">After 1 hour</option>
+              <option value="86400" selected>After 24 hours</option>
+              <option value="604800">After 7 days</option>
+              <option value="2592000">After 30 days</option>
+              <option value="0">Never</option>
+            </select>
+          </label>
+          <label class="workspace-expiry-label" for="workspaceMessageExpiry">
+            <span>Messages expire</span>
+            <select id="workspaceMessageExpiry" class="inline-input workspace-expiry-select">
+              <option value="900">After 15 minutes</option>
+              <option value="3600">After 1 hour</option>
+              <option value="86400" selected>After 24 hours</option>
+              <option value="604800">After 7 days</option>
+              <option value="2592000">After 30 days</option>
+              <option value="0">Never</option>
+            </select>
+          </label>
+          <label class="workspace-expiry-label" for="workspaceAccessMode">
+            <span>Access</span>
+            <select id="workspaceAccessMode" class="inline-input workspace-expiry-select">
+              <option value="public">Public</option>
+              <option value="password">Password protected</option>
+              <option value="explicit">Explicit users</option>
+            </select>
+          </label>
+          <div class="hidden-options" id="workspacePasswordWrap">
+            <div class="password-field-wrap">
+              <input id="workspacePassword" class="inline-input workspace-input" type="password" placeholder="Workspace password">
+              <button class="password-toggle-btn" type="button" data-password-toggle="workspacePassword">
+                <span class="password-eye-icon" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+          <div class="workspace-create-submit-row">
+            <button id="createWorkspaceBtn" class="workspace-create-submit" type="button">Create Workspace</button>
+          </div>
         </div>
       </div>
     </article>
@@ -71,7 +103,13 @@
     <p class="footer-line">
       <a class="footer-link" href="/help">Help</a>
       ·
+      <a class="footer-link" href="/users">Users</a>
+      ·
       <a class="footer-link" href="/openapi.yaml">OpenAPI</a>
+      ·
+      <a class="footer-link" href="https://github.com/vossie/DassieDrop" target="_blank" rel="noreferrer">GitHub</a>
+      ·
+      <a class="footer-link" href="/logout">Logout</a>
     </p>
     <p class="footer-line">
       DassieDrop v__APP_VERSION__
@@ -85,6 +123,7 @@
     __UPDATE_NOTICE__
   </footer>
 </main>
+<script src="/assets/password-toggle.js"></script>
 <script src="/assets/workspaces.js"></script>
 </body>
 </html>

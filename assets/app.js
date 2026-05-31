@@ -153,6 +153,7 @@ function setTextStatus(message, fade = false) {
 }
 
 function formatDate(ts) {
+  if (ts === null) return "Never";
   if (!ts) return "No content yet";
   return new Date(ts * 1000).toLocaleString();
 }

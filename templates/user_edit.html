@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DassieDrop Edit User</title>
+  <meta name="dassiedrop-csrf-token" content="__CSRF_TOKEN__">
+  <link rel="icon" type="image/png" href="/assets/DassieDrop-dassie-icon.png">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="header-bar">
+  <main class="shell shell-header">
+    <section class="hero">
+      <div class="hero-top">
+        <div class="hero-copy">
+          <div class="hero-title-row hero-title-row-workspace">
+            <div class="hero-brand-row">
+              <a class="hero-brand-link" href="/workspaces">
+                <img class="hero-mark" src="/assets/DassieDrop-dassie-icon.png" alt="">
+                <span class="hero-title-text">DassieDrop</span>
+              </a>
+            </div>
+            <div class="workspace-selector-wrap">
+              <a class="workspace-pill" href="/users" aria-label="Back to users" title="Back to users">
+                <span class="workspace-pill-label">Back to Users</span>
+              </a>
+            </div>
+          </div>
+          <h1 class="sr-only">DassieDrop Edit User</h1>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<main class="shell">
+  <section class="grid">
+    <article class="panel tab-panel workspace-panel">
+      <div class="panel-title">
+        <h2>Edit User</h2>
+        <div class="meta">Leave password or API key blank to keep the stored value.</div>
+      </div>
+
+      <div class="settings-form users-form">
+        <label class="settings-field" id="editUserNameField" for="editUserName">
+          <span class="settings-label-row">
+            <span>Username</span>
+            <span class="settings-help" tabindex="0" data-tooltip="The name this person enters on the login screen.">?</span>
+          </span>
+          <input id="editUserName" class="inline-input settings-input" type="text" autocomplete="username" placeholder="Username">
+        </label>
+        <label class="settings-field" for="editUserPassword">
+          <span class="settings-label-row">
+            <span>Password</span>
+            <span class="settings-help" tabindex="0" data-tooltip="Leave blank to keep the current password. Root and admin passwords can unlock protected workspaces.">?</span>
+          </span>
+          <div class="password-field-wrap">
+            <input id="editUserPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New password">
+            <button class="password-toggle-btn" type="button" data-password-toggle="editUserPassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </label>
+        <label class="settings-field" for="editUserApiKey">
+          <span class="settings-label-row">
+            <span>API key</span>
+            <span class="settings-help" tabindex="0" data-tooltip="Leave blank to keep the current API key. Scripts send this secret in the X-API-Key header.">?</span>
+          </span>
+          <div class="password-field-wrap">
+            <input id="editUserApiKey" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="API key">
+            <button class="password-toggle-btn" type="button" data-password-toggle="editUserApiKey">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </label>
+        <label class="settings-field" id="editUserRoleField" for="editUserRole">
+          <span class="settings-label-row">
+            <span>Role</span>
+            <span class="settings-help" tabindex="0" data-tooltip="User can access unprotected or password-known workspaces. Admin can access any workspace. Root can also manage all users.">?</span>
+          </span>
+          <select id="editUserRole" class="inline-input settings-input">
+            <option value="user">user - password-protected workspace access</option>
+            <option value="admin">admin - any workspace access</option>
+            <option value="root">root - user management</option>
+          </select>
+        </label>
+        <div class="users-edit-actions">
+          <button id="saveEditUserBtn" type="button">Save User</button>
+          <a class="workspace-cancel-btn button-link" href="/users">Cancel</a>
+        </div>
+      </div>
+
+      <div class="status" id="editUserStatus"></div>
+    </article>
+  </section>
+
+  <footer class="app-footer" aria-label="Licensing and privacy notice">
+    <p class="footer-line">
+      <a class="footer-link" href="/users">Users</a>
+      ·
+      <a class="footer-link" href="/help">Help</a>
+      ·
+      <a class="footer-link" href="https://github.com/vossie/DassieDrop" target="_blank" rel="noreferrer">GitHub</a>
+      ·
+      <a class="footer-link" href="/logout">Logout</a>
+    </p>
+    <p class="footer-line">
+      DassieDrop v__APP_VERSION__
+    </p>
+    <p class="footer-line">
+      Copyright © 2026 DassieDrop contributors. Released under the ISC License.
+    </p>
+    <p class="footer-line">
+      ISC licensed. DassieDrop is intended only for devices and people you trust on your own network.
+    </p>
+    __UPDATE_NOTICE__
+  </footer>
+</main>
+<script src="/assets/password-toggle.js"></script>
+<script src="/assets/user-edit.js"></script>
+</body>
+</html>

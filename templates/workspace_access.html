@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DassieDrop Workspace Access</title>
+  <meta name="dassiedrop-csrf-token" content="__CSRF_TOKEN__">
+  <link rel="icon" type="image/png" href="/assets/DassieDrop-dassie-icon.png">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="header-bar">
+  <main class="shell shell-header">
+    <section class="hero">
+      <div class="hero-top">
+        <div class="hero-copy">
+          <div class="hero-title-row hero-title-row-workspace">
+            <div class="hero-brand-row">
+              <a class="hero-brand-link" href="/workspaces">
+                <img class="hero-mark" src="/assets/DassieDrop-dassie-icon.png" alt="">
+                <span class="hero-title-text">DassieDrop</span>
+              </a>
+            </div>
+            <div class="workspace-selector-wrap">
+              <a class="workspace-pill" href="/" aria-label="Back to share page" title="Back to share page">
+                <span class="workspace-pill-label">Go Back</span>
+              </a>
+            </div>
+          </div>
+          <h1 class="sr-only">DassieDrop Workspace Access</h1>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<main class="shell">
+  <section class="grid">
+    <article class="panel tab-panel workspace-panel">
+      <div class="panel-title">
+        <h2>Workspace Access</h2>
+        <div class="meta">__WORKSPACE_NAME__</div>
+      </div>
+      <div id="workspacePasswordPanel" class="workspace-password-panel" __PASSWORD_PANEL_HIDDEN__>
+        <h3>Workspace Password</h3>
+        <div class="meta">Change the password required to open this workspace.</div>
+        <div class="row settings-row">
+          <div class="password-field-wrap">
+            <input id="workspaceAccessPassword" class="inline-input settings-input" type="password" autocomplete="new-password" placeholder="New workspace password">
+            <button class="password-toggle-btn" type="button" data-password-toggle="workspaceAccessPassword">
+              <span class="password-eye-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+          <button id="saveWorkspacePasswordBtn" type="button">Save Password</button>
+        </div>
+      </div>
+      <div class="access-manager" __ACCESS_MANAGER_HIDDEN__>
+        <section class="access-column" aria-labelledby="hasAccessTitle">
+          <h3 id="hasAccessTitle">Has Access</h3>
+          <select id="hasAccessUsers" class="access-select" multiple size="12"></select>
+        </section>
+        <div class="access-transfer-actions" aria-label="Move selected users">
+          <button id="removeAccessBtn" type="button">Move Right</button>
+          <button id="addAccessBtn" type="button">Move Left</button>
+        </div>
+        <section class="access-column" aria-labelledby="noAccessTitle">
+          <h3 id="noAccessTitle">No Access</h3>
+          <select id="noAccessUsers" class="access-select" multiple size="12"></select>
+        </section>
+      </div>
+      <div class="row text-controls-row">
+        <button id="saveAccessBtn" type="button" __ACCESS_MANAGER_HIDDEN__>Save Access</button>
+        <a class="workspace-cancel-btn button-link" href="/">Go Back</a>
+      </div>
+      <div class="status" id="accessStatus"></div>
+    </article>
+  </section>
+
+  <footer class="app-footer" aria-label="Licensing and privacy notice">
+    <p class="footer-line">
+      <a class="footer-link" href="/help">Help</a>
+      ·
+      <a class="footer-link" href="/users">Users</a>
+      ·
+      <a class="footer-link" href="/openapi.yaml">OpenAPI</a>
+      ·
+      <a class="footer-link" href="https://github.com/vossie/DassieDrop" target="_blank" rel="noreferrer">GitHub</a>
+      ·
+      <a class="footer-link" href="/logout">Logout</a>
+    </p>
+    <p class="footer-line">
+      DassieDrop v__APP_VERSION__
+    </p>
+    <p class="footer-line">
+      Copyright © 2026 DassieDrop contributors. Released under the ISC License.
+    </p>
+    <p class="footer-line">
+      ISC licensed. DassieDrop is intended only for devices and people you trust on your own network.
+    </p>
+    __UPDATE_NOTICE__
+  </footer>
+</main>
+<script src="/assets/workspace-access.js"></script>
+<script src="/assets/password-toggle.js"></script>
+</body>
+</html>

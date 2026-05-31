@@ -108,7 +108,7 @@ class PersistenceTests(CoreStateTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -150,7 +150,7 @@ class PersistenceTests(CoreStateTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -199,7 +199,7 @@ class PersistenceTests(CoreStateTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -248,7 +248,7 @@ class PersistenceTests(CoreStateTestCase):
                 },
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(broken_payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(broken_payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -259,8 +259,67 @@ class PersistenceTests(CoreStateTestCase):
 
         snapshot = app.get_snapshot("ops123")
         self.assertEqual(snapshot["files"][0]["name"], "kept.txt")
-        repaired = json.loads(app.uploads_index_path().read_text(encoding="utf-8"))
+        repaired = app.read_shelved_payload()
         self.assertEqual(len(repaired["workspaces"]), 2)
+
+    def test_reload_migrates_old_workspace_message_expiry_fields(self) -> None:
+        target = config.UPLOAD_DIR / "old-workspace.txt"
+        target.write_text("payload", encoding="utf-8")
+        payload = {
+            "workspaces": [
+                {
+                    "id": "old123",
+                    "name": "Old Room",
+                    "slug": "old-room",
+                    "created_at": self.current_time,
+                    "updated_at": self.current_time,
+                    "last_used_at": self.current_time,
+                    "expiry_seconds": 60,
+                    "texts": [
+                        {
+                            "id": "text123",
+                            "content": "old text",
+                            "hidden": False,
+                            "short_code": "OLDT",
+                            "created_at": self.current_time,
+                            "expires_at": self.current_time + 3600,
+                        }
+                    ],
+                    "files": [
+                        {
+                            "id": "file123",
+                            "name": "old-workspace.txt",
+                            "stored_name": "old-workspace.txt",
+                            "size": 7,
+                            "hidden": False,
+                            "short_code": "OLDF",
+                            "created_at": self.current_time,
+                            "expires_at": self.current_time + 3600,
+                        }
+                    ],
+                }
+            ]
+        }
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+
+        with state.state_lock:
+            state.shared_state["workspaces"] = {}
+            state.shared_state["reserved_upload_bytes"] = 0
+            state.shared_state["reserved_upload_names"] = set()
+
+        app.load_persisted_workspaces()
+
+        snapshot = app.get_snapshot("old123")
+        self.assertEqual(snapshot["workspace"]["expiry_seconds"], 60)
+        self.assertEqual(snapshot["workspace"]["message_expiry_seconds"], 60)
+        self.assertEqual(snapshot["texts"][0]["expires_at"], self.current_time + 60)
+        self.assertEqual(snapshot["files"][0]["expires_at"], self.current_time + 60)
+
+        repaired = app.read_shelved_payload()
+        migrated = next(item for item in repaired["workspaces"] if item["id"] == "old123")
+        self.assertEqual(migrated["message_expiry_seconds"], 60)
+        self.assertEqual(migrated["texts"][0]["expires_at"], self.current_time + 60)
+        self.assertEqual(migrated["files"][0]["expires_at"], self.current_time + 60)
 
     def test_workspace_deletion_removes_persisted_file_artifacts(self) -> None:
         workspace = app.create_workspace("Delete Room", password="vault")
@@ -278,15 +337,32 @@ class PersistenceTests(CoreStateTestCase):
         self.assertTrue(deleted)
         self.assertEqual(message, "")
         self.assertFalse(target.exists())
-        persisted = json.loads(app.uploads_index_path().read_text(encoding="utf-8"))
+        persisted = app.read_shelved_payload()
         self.assertNotIn(workspace["id"], {item["id"] for item in persisted["workspaces"]})
 
     def test_duplicate_workspace_names_get_unique_stable_slugs_after_reload(self) -> None:
-        first = app.create_workspace("Ops Room")
-        second = app.create_workspace("Ops-Room")
-
-        self.assertEqual(first["slug"], "ops-room")
-        self.assertEqual(second["slug"], "ops-room-2")
+        first = {
+            "id": "ops-one",
+            "name": "Ops Room",
+            "created_at": self.current_time,
+            "updated_at": self.current_time,
+            "last_used_at": self.current_time,
+            "texts": [],
+            "files": [],
+        }
+        second = {
+            "id": "ops-two",
+            "name": "Ops-Room",
+            "created_at": self.current_time,
+            "updated_at": self.current_time,
+            "last_used_at": self.current_time,
+            "texts": [],
+            "files": [],
+        }
+        app.legacy_uploads_index_path().write_text(
+            json.dumps({"workspaces": [first, second]}),
+            encoding="utf-8",
+        )
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -303,8 +379,19 @@ class PersistenceTests(CoreStateTestCase):
         self.assertEqual(listed[second["id"]], "ops-room-2")
 
     def test_workspace_named_default_does_not_collide_with_built_in_default_slug_after_reload(self) -> None:
-        created = app.create_workspace("Default")
-        self.assertEqual(created["slug"], "default-2")
+        created = {
+            "id": "custom-default",
+            "name": "Default",
+            "created_at": self.current_time,
+            "updated_at": self.current_time,
+            "last_used_at": self.current_time,
+            "texts": [],
+            "files": [],
+        }
+        app.legacy_uploads_index_path().write_text(
+            json.dumps({"workspaces": [created]}),
+            encoding="utf-8",
+        )
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -360,7 +447,7 @@ class PersistenceTests(CoreStateTestCase):
                 },
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}

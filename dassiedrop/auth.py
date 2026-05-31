@@ -25,6 +25,11 @@ def session_cookie(session_id: str, secure: bool = False) -> str:
     return f"session={session_id}; Path=/; HttpOnly; SameSite=Lax{secure_suffix}"
 
 
+def expired_session_cookie(secure: bool = False) -> str:
+    secure_suffix = "; Secure" if secure else ""
+    return f"session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure_suffix}"
+
+
 def get_session_by_id(session_id: str, touch: bool = False) -> dict | None:
     if not session_id:
         return None
@@ -53,8 +58,16 @@ def get_session(handler: BaseHTTPRequestHandler) -> tuple[str | None, dict | Non
     return (session_id, session)
 
 
+def logout(handler: BaseHTTPRequestHandler) -> str:
+    session_id, _ = get_session(handler)
+    if session_id:
+        with state.session_lock:
+            state.authorized_sessions.pop(session_id, None)
+    return expired_session_cookie(secure=bool(getattr(handler.server, "is_https", False)))
+
+
 def is_authorized(handler: BaseHTTPRequestHandler) -> bool:
-    if not config.ACCESS_CODE:
+    if not access_code_is_configured():
         return True
 
     if api_key_is_valid(handler):
@@ -64,24 +77,59 @@ def is_authorized(handler: BaseHTTPRequestHandler) -> bool:
     return session_id is not None
 
 
-def expected_api_key() -> str:
-    return config.API_KEY or config.ACCESS_CODE
+def access_code_is_configured() -> bool:
+    return bool(storage.list_users())
+
+
+def access_code_is_valid(code: str) -> bool:
+    return False
+
+
+def login_user(username: str, password: str) -> dict | None:
+    return storage.authenticate_user(username, password)
 
 
 def api_key_is_valid(handler: BaseHTTPRequestHandler) -> bool:
-    configured = expected_api_key()
-    if not configured:
-        return False
     api_key = handler.headers.get("X-API-Key", "").strip()
-    return bool(api_key) and hmac.compare_digest(api_key, configured)
+    if not api_key:
+        return False
+    return storage.api_key_user(api_key) is not None
 
 
-def create_authorized_session(workspace_id: str | None = None) -> str:
+def current_user(handler: BaseHTTPRequestHandler) -> dict | None:
+    api_key = handler.headers.get("X-API-Key", "").strip()
+    if api_key:
+        user = storage.api_key_user(api_key)
+        if user is not None:
+            return user
+    _, session = get_session(handler)
+    if session is None:
+        return None
+    user = storage.get_user(str(session.get("user_id") or ""))
+    return user
+
+
+def user_has_role(handler: BaseHTTPRequestHandler, roles: set[str]) -> bool:
+    user = current_user(handler)
+    if user is None:
+        return False
+    return storage.normalize_user_role(user.get("role")) in roles
+
+
+def create_authorized_session(
+    workspace_id: str | None = None,
+    user_id: str | None = None,
+    username: str | None = None,
+    role: str | None = None,
+) -> str:
     session_id = make_session_id()
     now = config.now_ts()
     with state.session_lock:
         state.authorized_sessions[session_id] = {
             "workspace_id": workspace_id,
+            "user_id": user_id,
+            "username": username,
+            "role": role,
             "csrf_token": secrets.token_urlsafe(24),
             "created_at": now,
             "last_seen_at": now,
@@ -225,7 +273,7 @@ def ensure_browser_session(handler: BaseHTTPRequestHandler) -> tuple[str | None,
     session_id, session = get_session(handler)
     if session_id is not None and session is not None:
         return (session_id, session, None)
-    if config.ACCESS_CODE:
+    if access_code_is_configured():
         return (None, None, None)
     session_id = create_authorized_session()
     with state.session_lock:

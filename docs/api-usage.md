@@ -69,10 +69,10 @@ curl -F "file=@-;filename=server.log" \
   http://127.0.0.1:8000/api/upload < server.log
 ```
 
-If DassieDrop is protected, include `X-API-Key`:
+If DassieDrop is protected, include a user's `X-API-Key`:
 
 ```bash
-curl -H 'X-API-Key: your-api-key-or-access-code' \
+curl -H 'X-API-Key: your-user-api-key' \
   -F "file=@-;filename=server.log" \
   http://127.0.0.1:8000/api/upload < server.log
 ```
@@ -93,12 +93,12 @@ curl -X DELETE http://127.0.0.1:8000/api/file/<file-id>
 
 ## Access Control
 
-If DassieDrop is protected, send `X-API-Key` for automation:
+If DassieDrop is protected, send a user's `X-API-Key` for automation:
 
 ```bash
 curl -X POST \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-api-key-or-access-code' \
+  -H 'X-API-Key: your-user-api-key' \
   -d '{"text":"Hello world"}' \
   http://127.0.0.1:8000/api/share-text
 ```
@@ -107,4 +107,7 @@ curl -X POST \
 
 - The API is intended for local-network use.
 - Use `X-Workspace` or `workspace` when targeting a non-default workspace.
+- Workspace names and usernames must be unique after normalisation.
+- Workspace access modes are `public`, `password`, and `explicit`.
+- For explicit-access workspaces, API clients can authenticate with a user's `X-API-Key`; the key's user must be the workspace owner, an admin/root user, or included in the workspace `explicit_user_ids`.
 - If you expose DassieDrop externally, put it behind proper TLS and access controls.

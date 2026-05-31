@@ -149,6 +149,17 @@ h1 {
 .tabs-panel {
   padding: 12px 16px;
 }
+.tabs-access-link {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+.tabs-access-link:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
 .header-help-link {
   display: inline-flex;
   align-items: center;
@@ -172,6 +183,33 @@ h1 {
 .header-help-link:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+.header-access-link {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--accent);
+  text-decoration: none;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.header-access-link:hover {
+  background: #e4ebf4;
+  border-color: #c8d8f0;
+}
+.header-access-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.header-lock-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
 }
 .tab-btn {
   min-width: 120px;
@@ -253,6 +291,7 @@ h1 {
 .workspace-selector-wrap {
   position: relative;
   display: inline-flex;
+  gap: 8px;
   justify-self: end;
 }
 .workspace-pill-label {
@@ -929,15 +968,109 @@ input[type="file"] {
 .workspace-input {
   width: min(100%, 420px);
 }
+.password-field-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: min(100%, 420px);
+}
+.password-field-wrap .inline-input,
+.password-field-wrap .settings-input,
+.password-field-wrap .workspace-input {
+  width: 100%;
+  padding-right: 46px;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.password-toggle-btn:hover {
+  background: #eef2f7;
+  color: var(--accent);
+  transform: translateY(-50%);
+}
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  transform: translateY(-50%);
+}
+.password-eye-icon,
+.password-eye-icon::before,
+.password-eye-icon::after {
+  display: block;
+  position: absolute;
+}
+.password-eye-icon {
+  left: 8px;
+  top: 10px;
+  width: 16px;
+  height: 11px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+}
+.password-eye-icon::before {
+  content: "";
+  left: 5px;
+  top: 2.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.password-toggle-btn[aria-pressed="true"] .password-eye-icon::after {
+  content: "";
+  left: 6px;
+  top: -4px;
+  width: 2px;
+  height: 19px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: center;
+}
 .workspace-create-row {
   width: 100%;
+}
+.workspace-expiry-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.workspace-expiry-select {
+  width: auto;
+  min-width: 150px;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 .workspace-create-row .hidden-options {
   width: auto;
   flex: 1 1 320px;
 }
-.workspace-create-row .inline-input {
+.workspace-create-row .inline-input,
+.workspace-create-row .password-field-wrap {
   width: 100%;
+}
+.workspace-create-submit-row {
+  flex: 0 0 100%;
+  display: flex;
+}
+.workspace-create-submit {
+  flex: 0 0 auto;
+  width: fit-content;
 }
 .workspace-auth-row {
   display: flex;
@@ -952,6 +1085,58 @@ input[type="file"] {
 .workspace-auth-input {
   width: min(100%, 320px);
 }
+.workspace-auth-row .password-field-wrap {
+  width: min(100%, 320px);
+}
+.access-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+.access-manager[hidden],
+#saveAccessBtn[hidden] {
+  display: none;
+}
+.workspace-password-panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 22px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.workspace-password-panel[hidden] {
+  display: none;
+}
+.workspace-password-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.access-column {
+  display: grid;
+  gap: 8px;
+}
+.access-column h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.access-select {
+  width: 100%;
+  min-height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  font: inherit;
+  color: var(--ink);
+}
+.access-transfer-actions {
+  display: grid;
+  gap: 10px;
+}
+.access-transfer-actions button {
+  white-space: nowrap;
+}
 .workspace-cancel-btn {
   background: #eef2f7;
   color: var(--ink);
@@ -960,6 +1145,143 @@ input[type="file"] {
 }
 .workspace-cancel-btn:hover {
   background: #e4ebf4;
+}
+.settings-form {
+  display: grid;
+  gap: 12px;
+}
+.settings-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.settings-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+}
+.settings-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--accent);
+  cursor: help;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.settings-help::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  width: min(280px, 78vw);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #061a3a;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.settings-help:hover::after,
+.settings-help:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.settings-help:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.settings-input {
+  width: min(100%, 420px);
+}
+.settings-input:disabled,
+.settings-input-cleared {
+  background: #eef2f7;
+  color: #7d8896;
+  border-color: #cfd8e3;
+  cursor: not-allowed;
+  opacity: 1;
+}
+.settings-clear-row {
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+.settings-clear-row:last-of-type {
+  margin-bottom: 0;
+}
+.settings-summary {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+}
+.settings-summary div {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.settings-summary dt {
+  color: var(--muted);
+}
+.settings-summary dd {
+  margin: 0;
+  font-weight: 650;
+}
+.users-form {
+  margin-bottom: 16px;
+}
+.user-self-hidden {
+  display: none;
+}
+.users-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 14px;
+}
+.users-edit-title {
+  margin-bottom: 0;
+}
+.users-edit-title h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.users-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  text-decoration: none;
+  font-weight: 700;
 }
 .dropzone {
   margin-top: 12px;
@@ -979,6 +1301,16 @@ input[type="file"] {
 .muted {
   color: var(--muted);
   font-size: 0.9rem;
+}
+@media (max-width: 900px) {
+  .header-access-link {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+  }
+  .tabs-access-link {
+    display: none;
+  }
 }
 @media (max-width: 720px) {
   .shell { padding: 18px; }
@@ -1105,7 +1437,17 @@ input[type="file"] {
   .workspace-auth-input {
     width: 100%;
   }
+  .workspace-expiry-label,
+  .workspace-expiry-select {
+    width: 100%;
+  }
   .workspace-auth-row button {
     flex: 1 1 140px;
+  }
+  .access-manager {
+    grid-template-columns: 1fr;
+  }
+  .access-transfer-actions {
+    grid-template-columns: 1fr 1fr;
   }
 }

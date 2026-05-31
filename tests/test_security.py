@@ -28,6 +28,8 @@ class SecurityTests(CoreStateTestCase):
         second = storage.hash_password("vault")
 
         self.assertNotEqual(first, second)
+        self.assertTrue(first.startswith("pbkdf2_sha256$"))
+        self.assertIn("$600000$", first)
         self.assertTrue(storage.verify_password("vault", first))
         self.assertFalse(storage.verify_password("wrong", first))
 
@@ -324,7 +326,7 @@ class SecurityHttpTests(CoreHttpTestCase):
                 }
             ]
         }
-        app.uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
+        app.legacy_uploads_index_path().write_text(json.dumps(payload), encoding="utf-8")
 
         with state.state_lock:
             state.shared_state["workspaces"] = {}
@@ -351,14 +353,14 @@ class SecurityHttpTests(CoreHttpTestCase):
         finally:
             config.ASSETS_DIR = original_assets_dir
 
-    def test_login_is_rate_limited_after_repeated_wrong_access_codes(self) -> None:
+    def test_login_is_rate_limited_after_repeated_wrong_user_passwords(self) -> None:
         self.start_server(access_code="secret-code")
 
         for _ in range(config.AUTH_MAX_FAILURES):
             response = self.request(
                 "POST",
                 "/login",
-                body=json.dumps({"code": "wrong"}).encode("utf-8"),
+                body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
             self.assertEqual(response["status"], 401)
@@ -366,7 +368,7 @@ class SecurityHttpTests(CoreHttpTestCase):
         throttled = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "wrong"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(throttled["status"], 429)
@@ -376,7 +378,40 @@ class SecurityHttpTests(CoreHttpTestCase):
         recovered = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "secret-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(recovered["status"], 200)
+
+    def test_login_request_volume_is_rate_limited_even_with_valid_passwords(self) -> None:
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = 2
+        self.start_server(access_code="secret-code")
+
+        for _ in range(config.LOGIN_RATE_LIMIT_MAX_REQUESTS):
+            response = self.request(
+                "POST",
+                "/login",
+                body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(response["status"], 200)
+
+        throttled = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(throttled["status"], 429)
+        self.assertEqual(throttled["headers"]["Retry-After"], "60")
+        self.assertIn("Too many login requests", throttled["text"])
+
+        self.current_time += config.LOGIN_RATE_LIMIT_WINDOW_SECONDS + 1
+        recovered = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(recovered["status"], 200)
@@ -472,14 +507,14 @@ class SecurityHttpTests(CoreHttpTestCase):
             self.request(
                 "POST",
                 "/login",
-                body=json.dumps({"code": "wrong"}).encode("utf-8"),
+                body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
 
         blocked_now = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "wrong"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(blocked_now["status"], 429)
@@ -488,7 +523,7 @@ class SecurityHttpTests(CoreHttpTestCase):
         blocked_later = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "wrong"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(blocked_later["status"], 429)
@@ -501,7 +536,7 @@ class SecurityHttpTests(CoreHttpTestCase):
             response = self.request(
                 "POST",
                 "/login",
-                body=json.dumps({"code": "wrong"}).encode("utf-8"),
+                body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
             self.assertEqual(response["status"], 401)
@@ -509,7 +544,7 @@ class SecurityHttpTests(CoreHttpTestCase):
         success = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "secret-code"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "secret-code"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(success["status"], 200)
@@ -518,7 +553,7 @@ class SecurityHttpTests(CoreHttpTestCase):
             response = self.request(
                 "POST",
                 "/login",
-                body=json.dumps({"code": "wrong"}).encode("utf-8"),
+                body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
             self.assertEqual(response["status"], 401)
@@ -526,7 +561,7 @@ class SecurityHttpTests(CoreHttpTestCase):
         not_blocked_yet = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "wrong"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(not_blocked_yet["status"], 401)
@@ -534,7 +569,7 @@ class SecurityHttpTests(CoreHttpTestCase):
         blocked = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": "wrong"}).encode("utf-8"),
+            body=json.dumps({"username": "admin", "password": "wrong"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(blocked["status"], 429)

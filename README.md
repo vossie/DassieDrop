@@ -4,7 +4,7 @@
 
 ## Your persistent local drop zone
 
-No cloud. No accounts. No syncing.  
+No cloud. No syncing. No external account.
 Just open a browser and drop.
 
 DassieDrop is a lightweight local-first drop zone for your home network.  
@@ -50,7 +50,7 @@ DassieDrop solves this with a simple idea:
 Upload from one device.  
 Download later from another.
 
-No pairing. No accounts. No cloud dependency.
+No pairing. No cloud dependency.
 
 ---
 
@@ -73,6 +73,9 @@ No pairing. No accounts. No cloud dependency.
 
 - **Automation-friendly**  
   API-ready with `curl` support.
+
+- **User-managed access**
+  Built-in local users with root, admin, and user roles plus per-user API keys.
 
 ---
 
@@ -133,6 +136,8 @@ Run DassieDrop on:
 
 Perfect for quick use or locked-down machines.
 
+Requires Python 3.11 or newer.
+
 ```bash
 git clone https://github.com/vossie/DassieDrop.git
 cd DassieDrop
@@ -188,7 +193,16 @@ Optional expiry policies for uploaded files and text.
 
 ### Secure
 
-Optional access codes and HTTPS support.
+User-based login, per-user API keys, roles, and HTTPS support.
+
+On a new installation DassieDrop creates a root user:
+
+```text
+username: admin
+password: password
+```
+
+Change the default password from the Users page after first login.
 
 ---
 
@@ -206,7 +220,7 @@ Like this project, it relies on simple shared spaces to stay connected efficient
 - Drag-and-drop multi-upload
 - Clipboard sync mode
 - File previews
-- Optional authentication
+- Workspace access controls
 - Temporary share links
 - Mobile-friendly PWA support
 

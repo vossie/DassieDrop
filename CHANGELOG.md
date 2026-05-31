@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.1 - 2026-05-31
+
+- Added local user management with root, admin, and user roles, per-user API keys, browser login, remember-username support, and logout links.
+- Replaced the old global app access code, global API key, and workspace super password with the user system. New installs create a root user named `admin` with password `password`.
+- Enforced that at least one root user always remains; root users can manage every account, while non-root users can only update their own password and API key.
+- Added workspace access modes: public, password-protected, and explicit user access. Workspace owners, admins, and root users can manage access.
+- Associated custom workspaces with the user that created them.
+- Added workspace-level expiry and message/file expiry controls. Message and file expiry is capped so entries cannot outlive their workspace, and startup migration repairs older workspace expiry records.
+- Allowed root users to delete the default workspace. If no workspace named Default exists, the app now lands on the workspace selector.
+- Hid inaccessible explicit workspaces and unavailable delete actions from users without permission.
+- Added password-protected workspace access management so owners, admins, and root users can change the workspace password.
+- Prevented duplicate workspace names after normalisation and duplicate usernames after normalisation.
+- Added login request rate limiting on top of wrong-password lockout to reduce brute-force and request-flood pressure on the login endpoint.
+- Updated the footer, workspace selector layout, mobile access controls, and password visibility controls.
+- Split the HTTP route handler into focused route mixins to make routing, pages, management actions, uploads, static serving, and WebSockets easier to maintain.
+
 ## 1.0.40 - 2026-05-08
 
 - Enforced workspace protection on direct `/download/{fileId}` and `/preview/{fileId}` access. Protected workspaces now require an authorized workspace session or `X-Workspace-Password` even for direct file URLs.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DassieDrop API
-  version: 1.0.40
+  version: 1.1.1
   description: |
     OpenAPI schema for the DassieDrop HTTP API.
 
@@ -25,8 +25,8 @@ paths:
       tags: [Auth]
       summary: Create an authorized browser session
       description: |
-        If `ACCESS_CODE` is configured, send it in the JSON body. On success,
-        the server sets the session cookie and places the session in the default
+        Send a user username and password in the JSON body. On success, the
+        server sets the session cookie and places the session in the default
         workspace immediately.
       requestBody:
         required: false
@@ -49,6 +49,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Too many login attempts or login requests from this client
 
   /api/workspaces:
     get:
@@ -124,7 +126,7 @@ paths:
     delete:
       tags: [Workspaces]
       summary: Delete a workspace
-      description: The default workspace cannot be deleted.
+      description: Only workspace managers can delete workspaces. The default workspace can only be deleted by a root user.
       security:
         - sessionCookie: []
         - apiKeyAuth: []
@@ -143,6 +145,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkspaceListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/workspaces/{workspaceId}/users:
+    post:
+      tags: [Workspaces]
+      summary: Replace the explicit access user list for a workspace
+      description: |
+        Only the workspace owner, an admin user, or a root user can manage
+        explicit workspace access. API clients may authenticate with
+        `X-API-Key`; browser sessions use the session cookie and CSRF token.
+      security:
+        - sessionCookie: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceUsersRequest'
+      responses:
+        '200':
+          description: Updated workspace access configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceAccessUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/workspaces/{workspaceId}/password:
+    post:
+      tags: [Workspaces]
+      summary: Change a password-protected workspace password
+      description: Only the workspace owner, an admin user, or a root user can change the password.
+      security:
+        - sessionCookie: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRequest'
+      responses:
+        '200':
+          description: Updated workspace access configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceAccessUpdateResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -606,11 +675,11 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: API key for automation clients. Uses `API_KEY` when configured, otherwise falls back to `ACCESS_CODE`.
+      description: Per-user API key for automation clients.
     sessionCookie:
       type: apiKey
       in: cookie
-      name: dassiedrop_session
+      name: session
   parameters:
     AccessPasswordHeader:
       name: X-Access-Password
@@ -738,8 +807,11 @@ components:
           const: true
     LoginRequest:
       type: object
+      required: [username, password]
       properties:
-        code:
+        username:
+          type: string
+        password:
           type: string
       additionalProperties: false
     PasswordRequest:
@@ -747,6 +819,16 @@ components:
       properties:
         password:
           type: string
+        expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Workspace inactivity expiry in seconds. Use `0` for no expiry.
+        message_expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Message and file expiry in seconds. Use `0` for no expiry. If the workspace expires, messages are capped to the workspace expiry.
       additionalProperties: false
     WorkspacePasswordRequest:
       allOf:
@@ -760,6 +842,34 @@ components:
           description: Workspace identifier. Allowed characters are `a-z`, `0-9`, `-`, `_`, and `.`.
         password:
           type: string
+        expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Workspace inactivity expiry in seconds. Use `0` for no expiry.
+        message_expiry_seconds:
+          type: integer
+          minimum: 0
+          default: 86400
+          description: Message and file expiry in seconds. Use `0` for no expiry. If the workspace expires, messages are capped to the workspace expiry.
+        access_mode:
+          type: string
+          enum: [public, password, explicit]
+          default: public
+        explicit_user_ids:
+          type: array
+          description: Initial user ids granted access when `access_mode` is `explicit`.
+          items:
+            type: string
+      additionalProperties: false
+    WorkspaceUsersRequest:
+      type: object
+      required: [user_ids]
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
       additionalProperties: false
     WorkspaceSummary:
       type: object
@@ -769,6 +879,11 @@ components:
         - slug
         - path
         - password_required
+        - access_mode
+        - owner_user_id
+        - explicit_user_ids
+        - expiry_seconds
+        - message_expiry_seconds
         - created_at
         - updated_at
         - text_count
@@ -784,6 +899,26 @@ components:
           type: string
         password_required:
           type: boolean
+        access_mode:
+          type: string
+          enum: [public, password, explicit]
+        owner_user_id:
+          type: string
+        explicit_user_ids:
+          type: array
+          items:
+            type: string
+        can_delete:
+          type: boolean
+          description: Present on workspace list items when the current user can delete the workspace.
+        expiry_seconds:
+          type: integer
+          minimum: 0
+          description: Workspace inactivity expiry in seconds. `0` means no expiry.
+        message_expiry_seconds:
+          type: integer
+          minimum: 0
+          description: Message and file expiry in seconds. `0` means no expiry.
         created_at:
           type: number
         updated_at:
@@ -796,6 +931,20 @@ components:
       type: object
       required: [workspaces, current_workspace_id]
       properties:
+        workspaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceSummary'
+        current_workspace_id:
+          type:
+            - string
+            - 'null'
+    WorkspaceAccessUpdateResponse:
+      type: object
+      required: [workspace, workspaces, current_workspace_id]
+      properties:
+        workspace:
+          $ref: '#/components/schemas/WorkspaceSummary'
         workspaces:
           type: array
           items:
@@ -856,7 +1005,9 @@ components:
         created_at:
           type: number
         expires_at:
-          type: number
+          type:
+            - number
+            - 'null'
         masked_content:
           type: string
         content:
@@ -902,7 +1053,9 @@ components:
         created_at:
           type: number
         expires_at:
-          type: number
+          type:
+            - number
+            - 'null'
     WorkspaceSnapshot:
       type: object
       required:
@@ -919,6 +1072,8 @@ components:
           type: number
         expires_after_seconds:
           type: integer
+          minimum: 0
+          description: Message and file expiry policy in seconds. `0` means no expiry.
         latest_text:
           type: string
         texts:

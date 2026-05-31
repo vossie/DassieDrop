@@ -11,7 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import app
-from dassiedrop import config, state
+from dassiedrop import config, state, storage
 
 
 def reset_app_state() -> None:
@@ -19,6 +19,12 @@ def reset_app_state() -> None:
         state.shared_state["workspaces"] = {}
         state.shared_state["reserved_upload_bytes"] = 0
         state.shared_state["reserved_upload_names"] = set()
+        state.shared_state["app_settings"] = {
+            "access_code_hash": None,
+            "api_key_hash": None,
+            "workspace_super_password_hash": None,
+        }
+        state.shared_state["users"] = {}
         state.shared_state["update_check"] = {
             "checking": False,
             "last_checked_at": 0.0,
@@ -37,10 +43,7 @@ class CoreStateTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.original_upload_dir = config.UPLOAD_DIR
-        self.original_access_code = config.ACCESS_CODE
-        self.original_api_key = config.API_KEY
         self.original_share_base_url = config.SHARE_BASE_URL
-        self.original_workspace_super_password = config.WORKSPACE_SUPER_PASSWORD
         self.original_now_ts = config.now_ts
         self.original_version_file = config.VERSION_FILE
         self.original_update_check_enabled = config.UPDATE_CHECK_ENABLED
@@ -49,6 +52,8 @@ class CoreStateTestCase(unittest.TestCase):
         self.original_max_json_body_size = config.MAX_JSON_BODY_SIZE
         self.original_max_total_storage_bytes = config.MAX_TOTAL_STORAGE_BYTES
         self.original_session_ttl_seconds = config.SESSION_TTL_SECONDS
+        self.original_login_rate_limit_window_seconds = config.LOGIN_RATE_LIMIT_WINDOW_SECONDS
+        self.original_login_rate_limit_max_requests = config.LOGIN_RATE_LIMIT_MAX_REQUESTS
         self.original_upload_rate_limit_window_seconds = config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS
         self.original_upload_rate_limit_max_requests = config.UPLOAD_RATE_LIMIT_MAX_REQUESTS
         self.original_workspace_create_rate_limit_window_seconds = (
@@ -58,16 +63,15 @@ class CoreStateTestCase(unittest.TestCase):
             config.WORKSPACE_CREATE_RATE_LIMIT_MAX_REQUESTS
         )
         config.UPLOAD_DIR = Path(self.temp_dir.name) / "uploads"
-        config.ACCESS_CODE = ""
-        config.API_KEY = ""
         config.SHARE_BASE_URL = ""
-        config.WORKSPACE_SUPER_PASSWORD = ""
         config.UPDATE_CHECK_ENABLED = False
         config.UPDATE_CHECK_URL = "https://example.invalid/VERSION"
         config.UPDATE_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
         config.MAX_JSON_BODY_SIZE = 1024 * 1024
         config.MAX_TOTAL_STORAGE_BYTES = 0
         config.SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = 20
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = 60
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = 10
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -82,16 +86,15 @@ class CoreStateTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         reset_app_state()
         config.UPLOAD_DIR = self.original_upload_dir
-        config.ACCESS_CODE = self.original_access_code
-        config.API_KEY = self.original_api_key
         config.SHARE_BASE_URL = self.original_share_base_url
-        config.WORKSPACE_SUPER_PASSWORD = self.original_workspace_super_password
         config.UPDATE_CHECK_ENABLED = self.original_update_check_enabled
         config.UPDATE_CHECK_URL = self.original_update_check_url
         config.UPDATE_CHECK_INTERVAL_SECONDS = self.original_update_check_interval_seconds
         config.MAX_JSON_BODY_SIZE = self.original_max_json_body_size
         config.MAX_TOTAL_STORAGE_BYTES = self.original_max_total_storage_bytes
         config.SESSION_TTL_SECONDS = self.original_session_ttl_seconds
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = self.original_login_rate_limit_window_seconds
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = self.original_login_rate_limit_max_requests
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = self.original_upload_rate_limit_window_seconds
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = self.original_upload_rate_limit_max_requests
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = (
@@ -112,10 +115,7 @@ class CoreHttpTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
         self.original_upload_dir = config.UPLOAD_DIR
-        self.original_access_code = config.ACCESS_CODE
-        self.original_api_key = config.API_KEY
         self.original_share_base_url = config.SHARE_BASE_URL
-        self.original_workspace_super_password = config.WORKSPACE_SUPER_PASSWORD
         self.original_now_ts = config.now_ts
         self.original_version_file = config.VERSION_FILE
         self.original_update_check_enabled = config.UPDATE_CHECK_ENABLED
@@ -124,6 +124,8 @@ class CoreHttpTestCase(unittest.TestCase):
         self.original_max_json_body_size = config.MAX_JSON_BODY_SIZE
         self.original_max_total_storage_bytes = config.MAX_TOTAL_STORAGE_BYTES
         self.original_session_ttl_seconds = config.SESSION_TTL_SECONDS
+        self.original_login_rate_limit_window_seconds = config.LOGIN_RATE_LIMIT_WINDOW_SECONDS
+        self.original_login_rate_limit_max_requests = config.LOGIN_RATE_LIMIT_MAX_REQUESTS
         self.original_upload_rate_limit_window_seconds = config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS
         self.original_upload_rate_limit_max_requests = config.UPLOAD_RATE_LIMIT_MAX_REQUESTS
         self.original_workspace_create_rate_limit_window_seconds = (
@@ -134,16 +136,15 @@ class CoreHttpTestCase(unittest.TestCase):
         )
         self.current_time = 1_700_100_000.0
         config.UPLOAD_DIR = Path(self.temp_dir.name) / "uploads"
-        config.ACCESS_CODE = ""
-        config.API_KEY = ""
         config.SHARE_BASE_URL = ""
-        config.WORKSPACE_SUPER_PASSWORD = ""
         config.UPDATE_CHECK_ENABLED = False
         config.UPDATE_CHECK_URL = "https://example.invalid/VERSION"
         config.UPDATE_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
         config.MAX_JSON_BODY_SIZE = 1024 * 1024
         config.MAX_TOTAL_STORAGE_BYTES = 0
         config.SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = 20
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = 60
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = 10
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -164,16 +165,15 @@ class CoreHttpTestCase(unittest.TestCase):
             self.thread.join(timeout=5)
         reset_app_state()
         config.UPLOAD_DIR = self.original_upload_dir
-        config.ACCESS_CODE = self.original_access_code
-        config.API_KEY = self.original_api_key
         config.SHARE_BASE_URL = self.original_share_base_url
-        config.WORKSPACE_SUPER_PASSWORD = self.original_workspace_super_password
         config.UPDATE_CHECK_ENABLED = self.original_update_check_enabled
         config.UPDATE_CHECK_URL = self.original_update_check_url
         config.UPDATE_CHECK_INTERVAL_SECONDS = self.original_update_check_interval_seconds
         config.MAX_JSON_BODY_SIZE = self.original_max_json_body_size
         config.MAX_TOTAL_STORAGE_BYTES = self.original_max_total_storage_bytes
         config.SESSION_TTL_SECONDS = self.original_session_ttl_seconds
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS = self.original_login_rate_limit_window_seconds
+        config.LOGIN_RATE_LIMIT_MAX_REQUESTS = self.original_login_rate_limit_max_requests
         config.UPLOAD_RATE_LIMIT_WINDOW_SECONDS = self.original_upload_rate_limit_window_seconds
         config.UPLOAD_RATE_LIMIT_MAX_REQUESTS = self.original_upload_rate_limit_max_requests
         config.WORKSPACE_CREATE_RATE_LIMIT_WINDOW_SECONDS = (
@@ -190,9 +190,14 @@ class CoreHttpTestCase(unittest.TestCase):
         return self.current_time
 
     def start_server(self, access_code: str = "", api_key: str = "") -> None:
-        config.ACCESS_CODE = access_code
-        config.API_KEY = api_key
         reset_app_state()
+        if access_code:
+            storage.set_user(
+                "admin",
+                password=access_code,
+                api_key=api_key or access_code,
+                role="root",
+            )
         app.start_background_tasks()
         self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.AppHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -255,11 +260,11 @@ class CoreHttpTestCase(unittest.TestCase):
             headers["Cookie"] = cookie
         return self.request("POST", "/api/upload", body=body, headers=headers)
 
-    def login(self, access_code: str) -> str:
+    def login(self, password: str, username: str = "admin") -> str:
         response = self.request(
             "POST",
             "/login",
-            body=json.dumps({"code": access_code}).encode("utf-8"),
+            body=json.dumps({"username": username, "password": password}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(response["status"], 200)

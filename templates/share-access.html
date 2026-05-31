@@ -13,10 +13,16 @@
   <h1>Access Password</h1>
   <p>Enter the access password for this LAN link.</p>
   <form method="post" action="/s/__SHORT_CODE__">
-    <input name="access_password" type="password" placeholder="Access password" autofocus>
+    <div class="password-field-wrap">
+      <input id="shareAccessPassword" name="access_password" type="password" placeholder="Access password" autofocus>
+      <button class="password-toggle-btn" type="button" data-password-toggle="shareAccessPassword">
+        <span class="password-eye-icon" aria-hidden="true"></span>
+      </button>
+    </div>
     <button type="submit">Open Link</button>
   </form>
   <div class="error">__ERROR_TEXT__</div>
 </main>
+<script src="/assets/password-toggle.js"></script>
 </body>
 </html>

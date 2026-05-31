@@ -65,7 +65,6 @@ Copy `dassiedrop.env.example` to `dassiedrop.env` in the same folder as `dassied
 
 ```ini
 HTTP_PORT=8000
-ACCESS_CODE=my-secret-code
 UPLOAD_DIR=C:\DassieDrop\uploads
 ```
 
@@ -88,11 +87,12 @@ HTTPS=1
 HTTPS_SELF_SIGNED_HOST=192.168.1.24
 ```
 
-## Protect The App With An Access Code
+## Default User
 
-```bash
-ACCESS_CODE=my-secret-code API_KEY=my-api-key ./.venv/bin/python app.py
-```
+On a new installation DassieDrop creates a root user named `admin` with password `password`.
+Change that password from the Users page after first login.
+
+Root users can manage all local user accounts. Admin users can access any workspace. Regular users can access public workspaces, password-protected workspaces with the password, and explicit-access workspaces they have been granted.
 
 ## Run With HTTPS
 
@@ -167,8 +167,6 @@ docker build -t dassiedrop .
 docker run -d \
   --name dassiedrop \
   -p 8000:8000 \
-  -e ACCESS_CODE=my-secret-code \
-  -e API_KEY=my-api-key \
   -e SHARE_BASE_URL=http://192.168.1.24:8000 \
   -v dassiedrop-data:/data \
   dassiedrop
@@ -181,7 +179,7 @@ The container stores uploads in `/data/uploads`.
 Run with Compose:
 
 ```bash
-ACCESS_CODE=my-secret-code API_KEY=my-api-key SHARE_BASE_URL=http://192.168.1.24:8000 docker compose up -d
+SHARE_BASE_URL=http://192.168.1.24:8000 docker compose up -d
 ```
 
 The included [docker-compose.yml](/home/carel/IdeaProjects/bronzegate/DassieDrop/docker-compose.yml) maps ports `8000` and `8443`, keeps uploads in a named volume, and restarts automatically.
@@ -237,8 +235,6 @@ This repo includes:
 Start the proxy stack:
 
 ```bash
-ACCESS_CODE=my-secret-code \
-API_KEY=my-api-key \
 SHARE_BASE_URL=https://localhost \
 docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
 ```
@@ -320,7 +316,7 @@ It will:
 Override defaults:
 
 ```bash
-sudo ACCESS_CODE=my-secret-code API_KEY=my-api-key PORT=8080 bash ./scripts/install-ubuntu-service.sh
+sudo PORT=8080 bash ./scripts/install-ubuntu-service.sh
 ```
 
 Or use `--port`:
@@ -338,7 +334,7 @@ sudo SHARE_BASE_URL=http://192.168.1.24:8000 bash ./scripts/install-ubuntu-servi
 The GitHub helper also supports overrides. On upgrade it reuses values from `/etc/dassiedrop/dassiedrop.env` unless you override them:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-ubuntu-install-upgrade.sh | sudo ACCESS_CODE=my-secret-code API_KEY=my-api-key PORT=8080 bash
+curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-ubuntu-install-upgrade.sh | sudo PORT=8080 bash
 ```
 
 To explicitly enable daily update checks during install:
@@ -347,13 +343,13 @@ To explicitly enable daily update checks during install:
 curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-ubuntu-install-upgrade.sh | sudo UPDATE_CHECK_ENABLED=1 bash
 ```
 
-If `ACCESS_CODE` or `API_KEY` is missing or set to `null`, the installer prompts for them on an interactive terminal. To run non-interactively and auto-generate any missing values, use `--silent`:
+To run non-interactively, use `--silent`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-ubuntu-install-upgrade.sh | sudo bash -s -- --silent
 ```
 
-In `--silent` mode, the installer generates secure random values for missing `ACCESS_CODE` and `API_KEY`, writes them to `/etc/dassiedrop/dassiedrop.env`, and prints the generated values at the end.
+In `--silent` mode, the installer keeps optional prompts disabled and uses default values.
 
 Use the Ubuntu service install for a native `systemd` deployment. Use Docker for a portable container runtime.
 
@@ -381,7 +377,7 @@ The CentOS Stream helper installs required packages with `dnf`, upgrades to `pyt
 Override defaults:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-centos-stream-install-upgrade.sh | sudo ACCESS_CODE=my-secret-code API_KEY=my-api-key PORT=8080 bash
+curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-centos-stream-install-upgrade.sh | sudo PORT=8080 bash
 ```
 
 To explicitly enable daily update checks during install:
@@ -390,13 +386,13 @@ To explicitly enable daily update checks during install:
 curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-centos-stream-install-upgrade.sh | sudo UPDATE_CHECK_ENABLED=1 bash
 ```
 
-If `ACCESS_CODE` or `API_KEY` is missing or set to `null`, the installer prompts for them on an interactive terminal. To run non-interactively and auto-generate any missing values, use `--silent`:
+To run non-interactively, use `--silent`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vossie/DassieDrop/master/scripts/github-centos-stream-install-upgrade.sh | sudo bash -s -- --silent
 ```
 
-In `--silent` mode, the installer generates secure random values for missing `ACCESS_CODE` and `API_KEY`, writes them to `/etc/dassiedrop/dassiedrop.env`, and prints the generated values at the end.
+In `--silent` mode, the installer keeps optional prompts disabled and uses default values.
 
 Uninstall the CentOS Stream service:
 

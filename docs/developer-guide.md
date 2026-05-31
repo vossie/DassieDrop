@@ -14,6 +14,8 @@ The project is intentionally simple and dependency-light. Keep new features cons
 
 ## Local Development
 
+Use Python 3.11 or newer.
+
 Run the app locally:
 
 ```bash
@@ -23,7 +25,7 @@ Run the app locally:
 Run tests:
 
 ```bash
-./.venv/bin/python -m unittest -v test_app.py
+./.venv/bin/python -m unittest discover -s tests -v
 ```
 
 ## Versioning
@@ -50,7 +52,7 @@ Example workflow:
 
 1. Make the code or docs change.
 2. Update `VERSION`.
-3. Run `./.venv/bin/python -m unittest -v test_app.py`.
+3. Run `./.venv/bin/python -m unittest discover -s tests -v`.
 4. Commit the change that includes the version bump.
 
 Record the user-visible change in `CHANGELOG.md` in the same release change.
