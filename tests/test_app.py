@@ -2920,6 +2920,47 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(allowed_enter["status"], 200)
         self.assertEqual(root["role"], "root")
 
+    def test_login_does_not_auto_open_password_protected_default_workspace(self) -> None:
+        self.start_server()
+        storage.set_user("alice", password="alice-pass", api_key="alice-api", role="user")
+        storage.set_workspace_password(app.DEFAULT_WORKSPACE_ID, "vault")
+
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "alice", "password": "alice-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        cookie = login["headers"]["Set-Cookie"].split(";", 1)[0]
+
+        state_response = self.request("GET", "/api/state", headers={"Cookie": cookie})
+        self.assertEqual(state_response["status"], 409)
+        self.assertIn("Workspace not selected", state_response["text"])
+
+        blocked_enter = self.select_workspace(cookie, app.DEFAULT_WORKSPACE_ID, "alice-pass")
+        self.assertEqual(blocked_enter["status"], 403)
+        self.assertIn("Wrong workspace password", blocked_enter["text"])
+
+    def test_privileged_user_can_enter_protected_default_with_own_password(self) -> None:
+        self.start_server()
+        storage.set_user("admin", password="admin-pass", api_key="admin-api", role="admin")
+        storage.set_workspace_password(app.DEFAULT_WORKSPACE_ID, "vault")
+
+        login = self.request(
+            "POST",
+            "/login",
+            body=json.dumps({"username": "admin", "password": "admin-pass"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(login["status"], 200)
+        cookie = login["headers"]["Set-Cookie"].split(";", 1)[0]
+
+        enter_response = self.select_workspace(cookie, app.DEFAULT_WORKSPACE_ID, "admin-pass")
+        self.assertEqual(enter_response["status"], 200)
+        state_response = self.request("GET", "/api/state", headers={"Cookie": cookie})
+        self.assertEqual(state_response["status"], 200)
+
     def test_direct_file_workspace_override_requires_matching_privileged_user(self) -> None:
         self.start_server()
         workspace = app.create_workspace("Secure Space", password="vault")

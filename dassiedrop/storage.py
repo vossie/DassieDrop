@@ -582,6 +582,27 @@ def workspace_user_can_access(workspace: dict, user_id: str | None) -> bool:
         return clean_user_id in normalize_workspace_user_ids(locked_workspace.get("explicit_user_ids"))
 
 
+def initial_session_workspace_id(user_id: str | None) -> str | None:
+    with state.state_lock:
+        workspace = get_workspace_locked(config.DEFAULT_WORKSPACE_ID)
+        if workspace is None:
+            if state.shared_state.get("default_workspace_deleted"):
+                return None
+            workspace = ensure_default_workspace_locked()
+        if workspace.get("password_hash"):
+            return None
+        if workspace_access_mode(workspace) == "explicit":
+            clean_user_id = str(user_id or "").strip()
+            if not clean_user_id:
+                return None
+            if not user_is_privileged_locked(clean_user_id):
+                owner_user_id = str(workspace.get("owner_user_id") or "").strip()
+                explicit_user_ids = normalize_workspace_user_ids(workspace.get("explicit_user_ids"))
+                if owner_user_id != clean_user_id and clean_user_id not in explicit_user_ids:
+                    return None
+        return workspace["id"]
+
+
 def workspace_delete_password_is_valid(
     workspace: dict,
     password: str,

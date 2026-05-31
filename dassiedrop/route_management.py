@@ -127,7 +127,7 @@ class ManagementRoutesMixin:
 
         auth.clear_throttle_failures(self, "login")
         session_id = auth.create_authorized_session(
-            config.DEFAULT_WORKSPACE_ID,
+            storage.initial_session_workspace_id(user["id"]),
             user_id=user["id"],
             username=user["username"],
             role=user["role"],
