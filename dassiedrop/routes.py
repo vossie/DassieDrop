@@ -66,6 +66,10 @@ class AppHandler(
             self.handle_workspaces_page()
             return
 
+        if parsed.path == "/workspaces/open":
+            self.handle_workspace_open_page()
+            return
+
         if parsed.path == "/workspaces/access":
             self.handle_workspace_access_page()
             return

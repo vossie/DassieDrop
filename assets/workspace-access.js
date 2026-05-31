@@ -24,16 +24,16 @@ function setAccessStatus(message) {
   accessStatus.textContent = message;
 }
 
-function optionForUser(user) {
+function optionForUser(user, isOwner = false) {
   const option = document.createElement("option");
   option.value = user.id;
-  option.textContent = `${user.username} (${user.role})`;
+  option.textContent = `${user.username} (${user.role})${isOwner ? " - owner" : ""}`;
+  option.disabled = isOwner;
   return option;
 }
 
 function selectableUsers() {
-  const ownerId = workspace ? workspace.owner_user_id : "";
-  return users.filter((user) => user.id && user.id !== ownerId && user.role !== "super-admin" && user.role !== "admin");
+  return users.filter((user) => user.id);
 }
 
 function renderAccessLists() {
@@ -49,8 +49,9 @@ function renderAccessLists() {
   }
 
   for (const user of selectableUsers()) {
+    const isOwner = user.id === workspace.owner_user_id;
     const target = selectedUserIds.has(user.id) ? hasAccessUsers : noAccessUsers;
-    target.appendChild(optionForUser(user));
+    target.appendChild(optionForUser(user, isOwner));
   }
 }
 

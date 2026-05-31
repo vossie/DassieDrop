@@ -121,6 +121,44 @@ class PageRoutesMixin:
             cookie=cookie,
         )
 
+    def handle_workspace_open_page(self) -> None:
+        if auth.access_code_is_configured() and not auth.is_authorized(self):
+            self.send_html(render_template("login.html"))
+            return
+
+        _, session, cookie = auth.ensure_browser_session(self)
+        if session is None:
+            self.send_html(render_template("login.html"))
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        requested_workspace = urllib.parse.parse_qs(parsed.query).get("workspace", [""])[0]
+        workspace = storage.get_workspace_by_selector(requested_workspace)
+        if workspace is None:
+            self.redirect("/workspaces", cookie=cookie)
+            return
+        if not workspace.get("password_hash"):
+            self.redirect(f"/w/{urllib.parse.quote(storage.workspace_slug_value(workspace))}", cookie=cookie)
+            return
+        can_manage_access = self.user_can_manage_workspace(workspace)
+        self.send_html(
+            render_template(
+                "workspace_open.html",
+                {
+                    "__APP_VERSION__": html.escape(get_app_version()),
+                    "__UPDATE_NOTICE__": update_notice_html(),
+                    "__CSRF_TOKEN__": html.escape(auth.csrf_token(session)),
+                    "__WORKSPACE_ID__": html.escape(str(workspace["id"])),
+                    "__WORKSPACE_NAME__": html.escape(storage.compact_workspace_name(workspace["name"])),
+                    "__CHANGE_PASSWORD_LINK__": (
+                        f'<a class="workspace-open-secondary" href="/workspaces/access?workspace={urllib.parse.quote(storage.workspace_slug_value(workspace))}">Change Password</a>'
+                        if can_manage_access
+                        else ""
+                    ),
+                },
+            ),
+            cookie=cookie,
+        )
+
     def handle_help_page(self) -> None:
         if auth.access_code_is_configured() and not auth.is_authorized(self):
             self.send_html(render_template("login.html"))
@@ -227,7 +265,7 @@ class PageRoutesMixin:
             ):
                 auth.record_throttle_failure(self, "workspace-shortcut", workspace["id"])
                 self.redirect(
-                    f"/workspaces?workspace={urllib.parse.quote(workspace_slug_value)}",
+                    f"/workspaces/open?workspace={urllib.parse.quote(workspace_slug_value)}",
                     cookie=cookie,
                 )
                 return

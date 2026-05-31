@@ -939,15 +939,6 @@ input[type="file"] {
   flex-wrap: wrap;
   margin-left: auto;
 }
-.workspace-access-list-link {
-  color: var(--accent);
-  font-weight: 700;
-  text-decoration: none;
-}
-.workspace-access-list-link:hover,
-.workspace-access-list-link:focus-visible {
-  text-decoration: underline;
-}
 .workspace-panel {
   max-width: 920px;
 }
@@ -1081,21 +1072,14 @@ input[type="file"] {
   flex: 0 0 auto;
   width: fit-content;
 }
-.workspace-auth-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
+.workspace-open-secondary {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
 }
-.workspace-auth-label {
-  flex: 1 1 100%;
-}
-.workspace-auth-input {
-  width: min(100%, 320px);
-}
-.workspace-auth-row .password-field-wrap {
-  width: min(100%, 320px);
+.workspace-open-secondary:hover,
+.workspace-open-secondary:focus-visible {
+  text-decoration: underline;
 }
 .access-manager {
   display: grid;
@@ -1477,15 +1461,9 @@ input[type="file"] {
   .entry-table td {
     padding-top: 0;
   }
-  .workspace-auth-input {
-    width: 100%;
-  }
   .workspace-expiry-label,
   .workspace-expiry-select {
     width: 100%;
-  }
-  .workspace-auth-row button {
-    flex: 1 1 140px;
   }
   .access-manager {
     grid-template-columns: 1fr;

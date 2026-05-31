@@ -31,6 +31,7 @@ class ManagementRoutesMixin:
             "workspaces": [
                 {
                     **workspace,
+                    "can_access": storage.workspace_user_can_access(workspace, self.current_user_id()),
                     "can_delete": self.user_can_delete_workspace(workspace),
                     "can_manage_access": (
                         storage.workspace_access_mode(workspace) in {"password", "explicit"}

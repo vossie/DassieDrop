@@ -908,6 +908,9 @@ components:
           type: array
           items:
             type: string
+        can_access:
+          type: boolean
+          description: Present on workspace list items when the current user can open the workspace.
         can_delete:
           type: boolean
           description: Present on workspace list items when the current user can delete the workspace.

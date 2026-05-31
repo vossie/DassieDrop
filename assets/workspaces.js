@@ -10,7 +10,6 @@ const createWorkspaceBtn = document.getElementById("createWorkspaceBtn");
 const requestedWorkspaceSlug = new URLSearchParams(window.location.search).get("workspace") || "";
 const csrfMeta = document.querySelector('meta[name="dassiedrop-csrf-token"]');
 const csrfToken = (csrfMeta && csrfMeta.content) || "";
-let pendingWorkspaceAction = null;
 
 function withCsrfHeaders(headers = {}) {
   if (!csrfToken) {
@@ -35,11 +34,6 @@ function toggleWorkspacePassword() {
 
 function setWorkspaceStatus(message) {
   workspaceStatus.textContent = message;
-}
-
-function setPendingWorkspaceAction(workspaceId, action) {
-  pendingWorkspaceAction = workspaceId && action ? { workspaceId, action } : null;
-  loadWorkspaces();
 }
 
 function formatWorkspaceDate(ts) {
@@ -88,7 +82,11 @@ function syncMessageExpiryOptions() {
 
 async function openWorkspace(workspace) {
   if (workspace.password_required) {
-    setPendingWorkspaceAction(workspace.id, "enter");
+    window.location.href = `/workspaces/open?workspace=${encodeURIComponent(workspace.slug || workspace.id)}`;
+    return;
+  }
+  if (workspace.access_mode === "explicit" && workspace.can_manage_access && !workspace.can_access) {
+    window.location.href = `/workspaces/access?workspace=${encodeURIComponent(workspace.slug || workspace.id)}`;
     return;
   }
   try {
@@ -180,17 +178,12 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     const actions = document.createElement("div");
     actions.className = "file-card-actions";
 
-    if (workspace.can_manage_access) {
-      const accessLink = document.createElement("a");
-      accessLink.className = "workspace-access-list-link";
-      accessLink.href = `/workspaces/access?workspace=${encodeURIComponent(workspace.slug || workspace.id)}`;
-      accessLink.textContent = workspace.access_mode === "password" ? "Change Password" : "Manage Access";
-      actions.appendChild(accessLink);
-    }
-
     const enterBtn = document.createElement("button");
     enterBtn.type = "button";
-    enterBtn.textContent = workspace.id === currentWorkspaceId ? "Open" : "Enter";
+    enterBtn.textContent =
+      workspace.access_mode === "explicit" && workspace.can_manage_access && !workspace.can_access
+        ? "Manage Access"
+        : "Open";
     enterBtn.addEventListener("click", async (event) => {
       event.stopPropagation();
       openWorkspace(workspace);
@@ -203,7 +196,7 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     deleteBtn.addEventListener("click", async (event) => {
       event.stopPropagation();
       if (workspace.password_required) {
-        setPendingWorkspaceAction(workspace.id, "delete");
+        setWorkspaceStatus("Open the password-protected workspace before deleting it.");
         return;
       }
       if (!confirmWorkspaceDelete(workspace)) {
@@ -219,7 +212,6 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
           throw new Error(`Workspace delete failed: ${response.status}`);
         }
         const payload = await response.json();
-        pendingWorkspaceAction = null;
         renderWorkspaces(
           payload.workspaces || [],
           payload.current_workspace_id || null
@@ -238,127 +230,9 @@ function renderWorkspaces(workspaces, currentWorkspaceId) {
     row.appendChild(actions);
     li.appendChild(row);
 
-    const requestedAction =
-      !pendingWorkspaceAction &&
-      requestedWorkspaceSlug &&
-      workspace.slug === requestedWorkspaceSlug &&
-      workspace.password_required
-        ? "enter"
-        : null;
-    const actionToRender =
-      pendingWorkspaceAction && pendingWorkspaceAction.workspaceId === workspace.id
-        ? pendingWorkspaceAction.action
-        : requestedAction;
-
-    if (workspace.password_required && actionToRender) {
-      const authRow = document.createElement("div");
-      authRow.className = "workspace-auth-row";
-
-      const authLabel = document.createElement("div");
-      authLabel.className = "meta workspace-auth-label";
-      authLabel.textContent =
-        actionToRender === "delete"
-          ? "Enter the workspace password to delete this workspace."
-          : "Enter the workspace password to open this workspace.";
-
-      const authInput = document.createElement("input");
-      authInput.type = "password";
-      authInput.className = "inline-input workspace-auth-input";
-      authInput.placeholder = "Workspace password";
-      authInput.autocomplete = "current-password";
-      authInput.enterKeyHint = actionToRender === "delete" ? "done" : "go";
-
-      const authInputWrap = document.createElement("div");
-      authInputWrap.className = "password-field-wrap";
-      const authToggle = document.createElement("button");
-      authToggle.type = "button";
-      authToggle.className = "password-toggle-btn";
-      authToggle.setAttribute("data-password-toggle", "");
-      authToggle.setAttribute("aria-label", "Show password");
-      authToggle.setAttribute("title", "Show password");
-      authToggle.setAttribute("aria-pressed", "false");
-      const authToggleIcon = document.createElement("span");
-      authToggleIcon.className = "password-eye-icon";
-      authToggleIcon.setAttribute("aria-hidden", "true");
-      authToggle.appendChild(authToggleIcon);
-      authInputWrap.appendChild(authInput);
-      authInputWrap.appendChild(authToggle);
-
-      const submitBtn = document.createElement("button");
-      submitBtn.type = "button";
-      submitBtn.textContent = actionToRender === "delete" ? "Delete Now" : "Open";
-      if (actionToRender === "delete") {
-        submitBtn.className = "danger";
-      }
-
-      const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.className = "workspace-cancel-btn";
-      cancelBtn.textContent = "Cancel";
-      cancelBtn.addEventListener("click", () => {
-        setPendingWorkspaceAction(null, null);
-      });
-
-      async function submitWorkspaceAction() {
-        const action = pendingWorkspaceAction?.action;
-        const password = authInput.value;
-        if (!password) {
-          setWorkspaceStatus("Workspace password required.");
-          authInput.focus();
-          return;
-        }
-        try {
-          if (action === "delete") {
-            if (!confirmWorkspaceDelete(workspace)) {
-              return;
-            }
-            const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}`, {
-              method: "DELETE",
-              headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-              body: JSON.stringify({ password })
-            });
-            if (!response.ok) {
-              throw new Error(`Workspace delete failed: ${response.status}`);
-            }
-            const payload = await response.json();
-            pendingWorkspaceAction = null;
-            renderWorkspaces(payload.workspaces || [], payload.current_workspace_id || null);
-            setWorkspaceStatus("Workspace deleted.");
-            return;
-          }
-
-          const response = await fetch(`/api/workspaces/${encodeURIComponent(workspace.id)}/enter`, {
-            method: "POST",
-            headers: withCsrfHeaders({ "Content-Type": "application/json" }),
-            body: JSON.stringify({ password })
-          });
-          if (!response.ok) {
-            throw new Error(`Workspace enter failed: ${response.status}`);
-          }
-          window.location.href = "/";
-        } catch (error) {
-          setWorkspaceStatus(
-            action === "delete"
-              ? "Could not delete workspace."
-              : "Could not enter workspace."
-          );
-        }
-      }
-
-      submitBtn.addEventListener("click", submitWorkspaceAction);
-      authInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          submitWorkspaceAction();
-        }
-      });
-
-      authRow.appendChild(authLabel);
-      authRow.appendChild(authInputWrap);
-      authRow.appendChild(submitBtn);
-      authRow.appendChild(cancelBtn);
-      li.appendChild(authRow);
-
-      window.setTimeout(() => authInput.focus(), 0);
+    if (requestedWorkspaceSlug && workspace.slug === requestedWorkspaceSlug && workspace.password_required) {
+      window.location.href = `/workspaces/open?workspace=${encodeURIComponent(workspace.slug)}`;
+      return;
     }
     workspaceList.appendChild(li);
   }

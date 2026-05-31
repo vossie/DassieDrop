@@ -1256,7 +1256,7 @@ class HttpServerTests(unittest.TestCase):
         workspace = payload["workspace"]
         self.assertEqual(workspace["access_mode"], "explicit")
         self.assertEqual(workspace["owner_user_id"], creator_id)
-        self.assertEqual(workspace["explicit_user_ids"], [])
+        self.assertEqual(workspace["explicit_user_ids"], [creator_id])
         self.assertNotIn("users", payload)
 
         blocked_cookie = self.user_cookie("blocked", "blocked-pass")
@@ -1286,7 +1286,7 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(update_response["status"], 200)
         updated = json.loads(update_response["body"])["workspace"]
-        self.assertEqual(updated["explicit_user_ids"], [blocked_id])
+        self.assertEqual(updated["explicit_user_ids"], [creator_id, blocked_id])
 
         allowed_enter = self.request(
             "POST",
@@ -1334,7 +1334,7 @@ class HttpServerTests(unittest.TestCase):
         workspace = json.loads(create_response["body"])["workspace"]
         self.assertEqual(workspace["access_mode"], "explicit")
         self.assertEqual(workspace["owner_user_id"], owner["id"])
-        self.assertEqual(workspace["explicit_user_ids"], [allowed["id"]])
+        self.assertEqual(workspace["explicit_user_ids"], [owner["id"], allowed["id"]])
 
         allowed_state = self.request(
             "GET",
@@ -1369,7 +1369,10 @@ class HttpServerTests(unittest.TestCase):
             headers={"Content-Type": "application/json", "X-API-Key": "owner-api"},
         )
         self.assertEqual(update_response["status"], 200)
-        self.assertEqual(json.loads(update_response["body"])["workspace"]["explicit_user_ids"], [blocked["id"]])
+        self.assertEqual(
+            json.loads(update_response["body"])["workspace"]["explicit_user_ids"],
+            [owner["id"], blocked["id"]],
+        )
 
         blocked_state = self.request(
             "GET",
@@ -1411,6 +1414,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(access_payload_response["status"], 200)
         access_payload = json.loads(access_payload_response["body"])
         self.assertEqual(access_payload["workspace"]["id"], workspace["id"])
+        self.assertIn(creator["id"], access_payload["workspace"]["explicit_user_ids"])
         self.assertIn(allowed["id"], access_payload["workspace"]["explicit_user_ids"])
         self.assertIn(blocked["id"], {user["id"] for user in access_payload["users"]})
         self.assertIn(admin["id"], {user["id"] for user in access_payload["users"]})
@@ -1427,7 +1431,7 @@ class HttpServerTests(unittest.TestCase):
         )
         self.assertEqual(update_response["status"], 200)
         updated = json.loads(update_response["body"])["workspace"]
-        self.assertEqual(updated["explicit_user_ids"], [blocked["id"]])
+        self.assertEqual(updated["explicit_user_ids"], [creator["id"], blocked["id"]])
 
     def test_workspace_access_page_requires_explicit_workspace_manager(self) -> None:
         self.start_server()
@@ -1539,6 +1543,46 @@ class HttpServerTests(unittest.TestCase):
         self.assertEqual(blocked_enter["status"], 403)
         self.assertIn("Wrong workspace password", blocked_enter["text"])
 
+    def test_password_workspace_open_page_accepts_password_and_links_manager_to_change_password(self) -> None:
+        self.start_server()
+        admin_cookie = self.root_cookie("Admin", "admin-pass")
+        workspace = app.create_workspace("Password Room", password="vault", access_mode="password")
+
+        open_page = self.request(
+            "GET",
+            f"/workspaces/open?workspace={workspace['slug']}",
+            headers={"Cookie": admin_cookie},
+        )
+        self.assertEqual(open_page["status"], 200)
+        self.assertIn('id="workspaceOpenPassword"', open_page["text"])
+        self.assertIn(f'/workspaces/access?workspace={workspace["slug"]}', open_page["text"])
+        token = open_page["text"].split('<meta name="dassiedrop-csrf-token" content="', 1)[1].split('"', 1)[0]
+
+        blocked_open = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/enter",
+            body=json.dumps({"password": "admin-pass"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": admin_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(blocked_open["status"], 403)
+        self.assertIn("Wrong workspace password", blocked_open["text"])
+
+        allowed_open = self.request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/enter",
+            body=json.dumps({"password": "vault"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": admin_cookie,
+                "X-CSRF-Token": token,
+            },
+        )
+        self.assertEqual(allowed_open["status"], 200)
+
     def test_privileged_user_must_add_self_before_entering_explicit_workspace(self) -> None:
         self.start_server()
         admin_cookie = self.root_cookie("Admin", "admin-pass")
@@ -1556,6 +1600,7 @@ class HttpServerTests(unittest.TestCase):
             item for item in json.loads(list_response["body"])["workspaces"] if item["id"] == workspace["id"]
         )
         self.assertTrue(listed["can_manage_access"])
+        self.assertFalse(listed["can_access"])
 
         blocked_enter = self.select_workspace(admin_cookie, workspace["id"])
         self.assertEqual(blocked_enter["status"], 403)
@@ -1579,6 +1624,7 @@ class HttpServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(add_self["status"], 200)
+        self.assertIn(admin["id"], json.loads(add_self["body"])["workspace"]["explicit_user_ids"])
 
         allowed_enter = self.select_workspace(admin_cookie, workspace["id"])
         self.assertEqual(allowed_enter["status"], 200)
@@ -2465,7 +2511,7 @@ class HttpServerTests(unittest.TestCase):
         response = self.request("GET", "/w/secure-space")
 
         self.assertEqual(response["status"], 303)
-        self.assertEqual(response["headers"]["Location"], "/workspaces?workspace=secure-space")
+        self.assertEqual(response["headers"]["Location"], "/workspaces/open?workspace=secure-space")
 
     def test_protected_workspace_can_be_selected_by_header_password(self) -> None:
         self.start_server()
@@ -3999,10 +4045,16 @@ class ScriptTests(unittest.TestCase):
         access_template = (REPO_ROOT / "templates" / "workspace_access.html").read_text(
             encoding="utf-8"
         )
+        open_template = (REPO_ROOT / "templates" / "workspace_open.html").read_text(
+            encoding="utf-8"
+        )
         script = (REPO_ROOT / "assets" / "workspaces.js").read_text(
             encoding="utf-8"
         )
         access_script = (REPO_ROOT / "assets" / "workspace-access.js").read_text(
+            encoding="utf-8"
+        )
+        open_script = (REPO_ROOT / "assets" / "workspace-open.js").read_text(
             encoding="utf-8"
         )
         index = (REPO_ROOT / "templates" / "index.html").read_text(
@@ -4047,8 +4099,14 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('fetch("/api/workspaces/access")', access_script)
         self.assertIn('/password`, {', access_script)
         self.assertIn('workspace.access_mode === "password"', access_script)
+        self.assertIn('option.disabled = isOwner;', access_script)
+        self.assertIn('const isOwner = user.id === workspace.owner_user_id;', access_script)
+        self.assertIn('return users.filter((user) => user.id);', access_script)
         self.assertIn("moveSelected", access_script)
         self.assertIn("Save Access", access_template)
+        self.assertIn('id="workspaceOpenPassword"', open_template)
+        self.assertIn("__CHANGE_PASSWORD_LINK__", open_template)
+        self.assertIn("/api/workspaces/${encodeURIComponent(workspaceId)}/enter", open_script)
         self.assertIn('href="/workspaces"', index)
         self.assertIn('class="hero-brand-link"', index)
         self.assertIn('/assets/DassieDrop-dassie-icon.png', index)
@@ -4071,11 +4129,13 @@ class ScriptTests(unittest.TestCase):
         self.assertNotIn("window.prompt", script)
         self.assertIn("function confirmWorkspaceDelete(workspace)", script)
         self.assertIn("Are you sure you want to delete ${workspace.name}? All data will be lost.", script)
-        self.assertIn('className = "workspace-auth-row"', script)
-        self.assertIn('className = "workspace-access-list-link"', script)
-        self.assertIn('accessLink.textContent = workspace.access_mode === "password" ? "Change Password" : "Manage Access"', script)
+        self.assertNotIn('className = "workspace-auth-row"', script)
+        self.assertNotIn('className = "workspace-access-list-link"', script)
+        self.assertNotIn("Change Password", script)
         self.assertIn("workspace.can_manage_access", script)
-        self.assertIn("Enter the workspace password to open this workspace.", script)
+        self.assertIn('/workspaces/open?workspace=', script)
+        self.assertIn("!workspace.can_access", script)
+        self.assertNotIn("Enter the workspace password to open this workspace.", script)
         self.assertNotIn("super-admin/admin user password", script)
         self.assertIn("if (workspace.can_delete) {", script)
         self.assertIn('li.addEventListener("click"', script)
